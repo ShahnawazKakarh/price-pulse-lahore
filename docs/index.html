@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Price Pulse Lahore — Live Market Rates</title>
+  <meta name="description" content="Live daily market rates for Lahore — vegetables, fruits, poultry & commodities. Updated every morning from Punjab Government official data.">
+  <meta property="og:title" content="Price Pulse Lahore — Live Market Rates">
+  <meta property="og:description" content="Live daily market rates for Lahore, Pakistan">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Noto+Nastaliq+Urdu&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:       #080a0e;
+      --bg2:      #0d1117;
+      --bg3:      #131920;
+      --border:   #1e2a35;
+      --border2:  #243040;
+      --text:     #e8edf5;
+      --text2:    #8899aa;
+      --text3:    #445566;
+      --green:    #00d68f;
+      --green-dim:#00d68f22;
+      --red:      #ff4d6a;
+      --red-dim:  #ff4d6a22;
+      --amber:    #ffb340;
+      --amber-dim:#ffb34022;
+      --blue:     #3b9eff;
+      --blue-dim: #3b9eff15;
+      --accent:   #00d68f;
+      --font-d:   'Syne', sans-serif;
+      --font-m:   'JetBrains Mono', monospace;
+      --font-u:   'Noto Nastaliq Urdu', serif;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-d);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity: .25;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Ticker ── */
+    .ticker-wrap {
+      position: sticky; top: 0; z-index: 100;
+      background: var(--bg2);
+      border-bottom: 1px solid var(--border);
+      overflow: hidden; height: 44px;
+      display: flex; align-items: center;
+    }
+    .ticker-label {
+      flex-shrink: 0; padding: 0 16px;
+      font-family: var(--font-m); font-size: 10px; font-weight: 600;
+      letter-spacing: .12em; text-transform: uppercase; color: var(--accent);
+      border-right: 1px solid var(--border); height: 100%;
+      display: flex; align-items: center; gap: 6px;
+      background: var(--bg2); z-index: 2;
+    }
+    .ticker-label::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%;
+      background: var(--accent); animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.8)} }
+    .ticker-track {
+      display: flex; animation: scroll-left 50s linear infinite;
+      white-space: nowrap;
+    }
+    .ticker-track:hover { animation-play-state: paused; }
+    @keyframes scroll-left { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
+    .ticker-item {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 0 24px; font-family: var(--font-m); font-size: 12px;
+      border-right: 1px solid var(--border); height: 44px;
+    }
+    .ticker-name  { color: var(--text2); font-weight: 500; }
+    .ticker-price { color: var(--text);  font-weight: 600; }
+    .ticker-change { font-size: 11px; font-weight: 600; }
+    .ticker-change.up    { color: var(--green); }
+    .ticker-change.down  { color: var(--red); }
+    .ticker-change.stable{ color: var(--text3); }
+
+    /* ── Header ── */
+    .header {
+      position: relative; z-index: 1;
+      padding: 48px 32px 32px;
+      display: flex; align-items: flex-end;
+      justify-content: space-between; flex-wrap: wrap; gap: 20px;
+      max-width: 1400px; margin: 0 auto;
+    }
+    .header h1 {
+      font-size: clamp(28px,5vw,52px); font-weight: 800;
+      letter-spacing: -.02em; line-height: 1;
+    }
+    .header h1 span { color: var(--accent); }
+    .header p { margin-top: 8px; font-size: 14px; color: var(--text2); font-family: var(--font-m); }
+    .header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+    .last-updated { font-family: var(--font-m); font-size: 11px; color: var(--text3); }
+    .data-source  { font-family: var(--font-m); font-size: 11px; color: var(--text3); }
+    .data-source a { color: var(--blue); text-decoration: none; }
+
+    /* ── Stats ── */
+    .stats-row {
+      position: relative; z-index: 1;
+      max-width: 1400px; margin: 0 auto; padding: 0 32px 32px;
+      display: grid; grid-template-columns: repeat(4,1fr); gap: 12px;
+    }
+    .stat-card {
+      background: var(--bg2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 20px; position: relative;
+      overflow: hidden; transition: border-color .2s;
+    }
+    .stat-card:hover { border-color: var(--border2); }
+    .stat-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    }
+    .stat-card.green::before { background: var(--green); }
+    .stat-card.red::before   { background: var(--red); }
+    .stat-card.amber::before { background: var(--amber); }
+    .stat-card.blue::before  { background: var(--blue); }
+    .stat-label { font-family: var(--font-m); font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text3); margin-bottom: 10px; }
+    .stat-value { font-size: 32px; font-weight: 800; line-height: 1; letter-spacing: -.02em; }
+    .stat-value.green { color: var(--green); }
+    .stat-value.red   { color: var(--red); }
+    .stat-value.amber { color: var(--amber); }
+    .stat-value.blue  { color: var(--blue); }
+    .stat-sub { margin-top: 6px; font-size: 12px; color: var(--text3); font-family: var(--font-m); }
+
+    /* ── Controls bar ── */
+    .controls {
+      position: relative; z-index: 1;
+      max-width: 1400px; margin: 0 auto; padding: 0 32px 20px;
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    }
+
+    /* category tabs */
+    .tab {
+      padding: 8px 18px; border: 1px solid var(--border); border-radius: 100px;
+      background: transparent; color: var(--text2); font-family: var(--font-d);
+      font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;
+    }
+    .tab:hover { border-color: var(--border2); color: var(--text); }
+    .tab.active { background: var(--accent); border-color: var(--accent); color: #000; }
+
+    /* search */
+    .search-input {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 14px; color: var(--text); font-family: var(--font-m);
+      font-size: 13px; outline: none; transition: border-color .15s; width: 200px;
+    }
+    .search-input::placeholder { color: var(--text3); }
+    .search-input:focus { border-color: var(--accent); }
+
+    /* selects */
+    .ctrl-select {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 8px 12px; color: var(--text2); font-family: var(--font-m);
+      font-size: 12px; outline: none; cursor: pointer; transition: border-color .15s;
+      appearance: none; padding-right: 28px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23445566' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 8px center;
+    }
+    .ctrl-select:focus { border-color: var(--accent); }
+    .ctrl-select option { background: var(--bg2); }
+
+    /* direction filter pills */
+    .dir-pill {
+      padding: 7px 14px; border: 1px solid var(--border); border-radius: 100px;
+      background: transparent; font-family: var(--font-m); font-size: 11px;
+      font-weight: 600; cursor: pointer; transition: all .15s; letter-spacing: .04em;
+    }
+    .dir-pill.up    { color: var(--green); }
+    .dir-pill.down  { color: var(--red); }
+    .dir-pill.stable{ color: var(--amber); }
+    .dir-pill.active.up    { background: var(--green-dim); border-color: var(--green); }
+    .dir-pill.active.down  { background: var(--red-dim);   border-color: var(--red); }
+    .dir-pill.active.stable{ background: var(--amber-dim); border-color: var(--amber); }
+
+    .ctrl-divider { width: 1px; height: 24px; background: var(--border); flex-shrink: 0; }
+
+    /* ── Table ── */
+    .table-wrap {
+      position: relative; z-index: 1;
+      max-width: 1400px; margin: 0 auto; padding: 0 32px 32px;
+    }
+    .price-table { width: 100%; border-collapse: collapse; background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .price-table thead tr { border-bottom: 1px solid var(--border); }
+    .price-table th {
+      padding: 14px 20px; text-align: left; font-family: var(--font-m);
+      font-size: 10px; font-weight: 600; letter-spacing: .1em;
+      text-transform: uppercase; color: var(--text3); cursor: pointer;
+      user-select: none; transition: color .15s; white-space: nowrap;
+    }
+    .price-table th:hover { color: var(--text2); }
+    .price-table th.sorted { color: var(--accent); }
+    .price-table th:last-child { text-align: right; }
+    .price-table tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+    .price-table tbody tr:last-child { border-bottom: none; }
+    .price-table tbody tr:hover { background: var(--bg3); }
+    .price-table td { padding: 14px 20px; font-size: 13px; vertical-align: middle; }
+    .item-name-en { font-weight: 600; color: var(--text); font-size: 14px; }
+    .item-name-ur { font-family: var(--font-u); font-size: 13px; color: var(--text2); display: block; margin-top: 2px; direction: rtl; }
+    .cat-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-family: var(--font-m); font-size: 10px; font-weight: 600;
+      letter-spacing: .05em; text-transform: uppercase;
+    }
+    .cat-badge.vegetables          { background: #00d68f15; color: var(--green); }
+    .cat-badge.fruits              { background: #ffb34018; color: var(--amber); }
+    .cat-badge.poultry             { background: #3b9eff15; color: var(--blue); }
+    .cat-badge.essential_commodities{ background: #ff4d6a15; color: var(--red); }
+    .price-cell { font-family: var(--font-m); font-size: 13px; color: var(--text); }
+    .price-range { font-size: 11px; color: var(--text3); margin-top: 2px; }
+    .change-cell { text-align: right; }
+    .change-pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 4px 10px; border-radius: 100px;
+      font-family: var(--font-m); font-size: 12px; font-weight: 600;
+    }
+    .change-pill.up     { background: var(--green-dim); color: var(--green); }
+    .change-pill.down   { background: var(--red-dim);   color: var(--red); }
+    .change-pill.stable { background: var(--border);     color: var(--text3); }
+
+    /* sort indicator */
+    .sort-icon { font-size: 9px; margin-left: 4px; opacity: .5; }
+    .sorted .sort-icon { opacity: 1; }
+
+    /* result count */
+    .result-count {
+      font-family: var(--font-m); font-size: 11px; color: var(--text3);
+      padding: 0 32px 12px; max-width: 1400px; margin: 0 auto;
+      position: relative; z-index: 1;
+    }
+
+    /* ── Historical section ── */
+    .section-title {
+      position: relative; z-index: 1;
+      max-width: 1400px; margin: 0 auto; padding: 8px 32px 16px;
+      font-size: 13px; font-weight: 700; letter-spacing: .08em;
+      text-transform: uppercase; color: var(--text3);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .section-title::after {
+      content: ''; flex: 1; height: 1px; background: var(--border);
+    }
+
+    /* ── Movers ── */
+    .movers-section {
+      position: relative; z-index: 1;
+      max-width: 1400px; margin: 0 auto; padding: 0 32px 48px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+    }
+    .movers-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .movers-header { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+    .movers-header h3 { font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+    .movers-header h3.green { color: var(--green); }
+    .movers-header h3.red   { color: var(--red); }
+    .mover-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 20px; border-bottom: 1px solid var(--border); transition: background .1s;
+    }
+    .mover-row:last-child { border-bottom: none; }
+    .mover-row:hover { background: var(--bg3); }
+    .mover-name  { font-size: 13px; font-weight: 600; color: var(--text); }
+    .mover-meta  { font-family: var(--font-m); font-size: 11px; color: var(--text3); margin-top: 2px; }
+
+    /* ── Historical data section ── */
+    .history-section {
+      position: relative; z-index: 1;
+      max-width: 1400px; margin: 0 auto; padding: 0 32px 48px;
+    }
+    .history-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;
+    }
+    .history-card {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px 20px;
+    }
+    .history-date { font-family: var(--font-m); font-size: 11px; color: var(--text3); margin-bottom: 8px; }
+    .history-stats { display: flex; gap: 16px; }
+    .history-stat { text-align: center; }
+    .history-stat .val { font-size: 20px; font-weight: 800; }
+    .history-stat .lbl { font-family: var(--font-m); font-size: 10px; color: var(--text3); margin-top: 2px; }
+
+    /* ── Footer ── */
+    .footer {
+      position: relative; z-index: 1; border-top: 1px solid var(--border);
+      padding: 24px 32px; max-width: 1400px; margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+    }
+    .footer-brand { font-size: 13px; font-weight: 700; color: var(--text2); }
+    .footer-brand a { color: var(--accent); text-decoration: none; }
+    .footer-links { display: flex; gap: 20px; }
+    .footer-links a { font-family: var(--font-m); font-size: 11px; color: var(--text3); text-decoration: none; transition: color .15s; }
+    .footer-links a:hover { color: var(--text2); }
+
+    /* ── States ── */
+    .state-wrap {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; padding: 80px 32px; gap: 16px;
+      color: var(--text3); font-family: var(--font-m); font-size: 13px;
+    }
+    .spinner {
+      width: 24px; height: 24px; border: 2px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Responsive ── */
+    @media (max-width: 900px) {
+      .stats-row { grid-template-columns: 1fr 1fr; }
+      .movers-section { grid-template-columns: 1fr; }
+      .header,.stats-row,.controls,.result-count,.table-wrap,.movers-section,.history-section,.section-title,.footer {
+        padding-left: 16px; padding-right: 16px;
+      }
+    }
+    @media (max-width: 600px) {
+      .price-table th:nth-child(2), .price-table td:nth-child(2) { display: none; }
+      .search-input { width: 140px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Ticker -->
+<div class="ticker-wrap">
+  <div class="ticker-label">LIVE</div>
+  <div style="overflow:hidden;flex:1">
+    <div class="ticker-track" id="ticker"></div>
+  </div>
+</div>
+
+<!-- Header -->
+<header class="header">
+  <div>
+    <h1>Price <span>Pulse</span> Lahore</h1>
+    <p>روزانہ منڈی کی قیمتیں — Daily market rates, Lahore</p>
+  </div>
+  <div class="header-right">
+    <div class="last-updated" id="last-updated">Loading...</div>
+    <div class="data-source">
+      Source: <a href="https://lahore.punjab.gov.pk/market_rates" target="_blank">Punjab Govt</a>
+      &nbsp;·&nbsp; <a href="https://github.com/ShahnawazKakarh/price-pulse-lahore" target="_blank">GitHub</a>
+      &nbsp;·&nbsp; <a href="#" id="api-link" target="_blank">API</a>
+    </div>
+  </div>
+</header>
+
+<!-- Stats -->
+<div class="stats-row">
+  <div class="stat-card blue">
+    <div class="stat-label">Total Items</div>
+    <div class="stat-value blue" id="stat-total">—</div>
+    <div class="stat-sub">tracked today</div>
+  </div>
+  <div class="stat-card green">
+    <div class="stat-label">Rising ↑</div>
+    <div class="stat-value green" id="stat-rising">—</div>
+    <div class="stat-sub">prices up today</div>
+  </div>
+  <div class="stat-card red">
+    <div class="stat-label">Falling ↓</div>
+    <div class="stat-value red" id="stat-falling">—</div>
+    <div class="stat-sub">prices down today</div>
+  </div>
+  <div class="stat-card amber">
+    <div class="stat-label">Stable →</div>
+    <div class="stat-value amber" id="stat-stable">—</div>
+    <div class="stat-sub">no change today</div>
+  </div>
+</div>
+
+<!-- Controls -->
+<div class="controls">
+  <!-- Category tabs -->
+  <button class="tab active" data-cat="all">All</button>
+  <button class="tab" data-cat="vegetables">Vegetables</button>
+  <button class="tab" data-cat="fruits">Fruits</button>
+  <button class="tab" data-cat="poultry">Poultry</button>
+  <button class="tab" data-cat="essential_commodities">Commodities</button>
+
+  <div class="ctrl-divider"></div>
+
+  <!-- Direction filter -->
+  <button class="dir-pill up"    data-dir="up">▲ Rising</button>
+  <button class="dir-pill down"  data-dir="down">▼ Falling</button>
+  <button class="dir-pill stable" data-dir="stable">→ Stable</button>
+
+  <div class="ctrl-divider"></div>
+
+  <!-- Sort -->
+  <select class="ctrl-select" id="sort-select">
+    <option value="name-asc">Sort: A → Z</option>
+    <option value="name-desc">Sort: Z → A</option>
+    <option value="price-asc">Price: Low → High</option>
+    <option value="price-desc">Price: High → Low</option>
+    <option value="change-desc">Change: Biggest ↑</option>
+    <option value="change-asc">Change: Biggest ↓</option>
+  </select>
+
+  <!-- Search -->
+  <input class="search-input" id="search" type="text" placeholder="Search (tomato, آلو...)">
+</div>
+
+<!-- Result count -->
+<div class="result-count" id="result-count"></div>
+
+<!-- Table -->
+<div class="table-wrap">
+  <div id="table-container">
+    <div class="state-wrap"><div class="spinner"></div><span>Loading prices...</span></div>
+  </div>
+</div>
+
+<!-- Top Movers -->
+<div class="section-title">Top Movers Today</div>
+<div class="movers-section" id="movers-section">
+  <div class="movers-card">
+    <div class="movers-header"><h3 class="green">▲ Top Gainers</h3></div>
+    <div id="gainers-list"><div class="state-wrap" style="padding:20px">Loading...</div></div>
+  </div>
+  <div class="movers-card">
+    <div class="movers-header"><h3 class="red">▼ Top Losers</h3></div>
+    <div id="losers-list"><div class="state-wrap" style="padding:20px">Loading...</div></div>
+  </div>
+</div>
+
+<!-- Historical -->
+<div class="section-title" id="history-title" style="display:none">Historical Data</div>
+<div class="history-section" id="history-section" style="display:none">
+  <div class="history-grid" id="history-grid"></div>
+</div>
+
+<!-- Footer -->
+<footer class="footer">
+  <div class="footer-brand">Built by <a href="https://skakarh.com" target="_blank">QA Pulse by SK</a></div>
+  <div class="footer-links">
+    <a href="https://github.com/ShahnawazKakarh/price-pulse-lahore" target="_blank">GitHub</a>
+    <a href="https://lahore.punjab.gov.pk/market_rates" target="_blank">Data Source</a>
+    <a href="https://skakarh.com" target="_blank">skakarh.com</a>
+  </div>
+</footer>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const IS_GITHUB  = location.hostname.includes('github.io') || location.hostname.includes('skakarh.com');
+const RAILWAY_URL = 'https://price-pulse-lahore.up.railway.app'; // update after Railway deploy
+const LOCAL_URL   = 'http://localhost:8000';
+const BASE        = IS_GITHUB ? RAILWAY_URL : LOCAL_URL;
+
+document.getElementById('api-link').href = BASE + '/docs';
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let allData     = [];
+let activeTab   = 'all';
+let activeDirs  = new Set();   // empty = show all directions
+let sortKey     = 'name-asc';
+let searchQ     = '';
+let sortAsc     = true;
+
+// ── Fetch today ───────────────────────────────────────────────────────────────
+async function fetchData() {
+  try {
+    const res = await fetch(`${BASE}/today`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    allData = (json.data || []).map(d => ({
+      ...d,
+      avg_price: d.avg_price || (d.min_price + d.max_price) / 2,
+    }));
+    document.getElementById('last-updated').textContent =
+      `Updated: ${json.date || 'today'} · refreshes every 30 min`;
+    renderAll();
+    fetchHistory();
+  } catch (err) {
+    document.getElementById('table-container').innerHTML =
+      `<div class="state-wrap">
+        ⚠ Could not load data.<br>
+        <a href="${BASE}/today" style="color:var(--blue)" target="_blank">Check API →</a>
+      </div>`;
+    document.getElementById('stat-total').textContent = '—';
+  }
+}
+
+// ── Fetch history (multiple JSON files) ───────────────────────────────────────
+async function fetchHistory() {
+  // Try to get last 5 days from API /today for each date
+  // For now pull from movers endpoint which has summary
+  try {
+    const res = await fetch(`${BASE}/movers?limit=5`);
+    if (!res.ok) return;
+    // History section will show when DB is live
+    // For now show today's summary only
+  } catch {}
+}
+
+// ── Render everything ─────────────────────────────────────────────────────────
+function renderAll() {
+  renderStats();
+  renderTicker();
+  renderTable();
+  renderMovers();
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+function renderStats() {
+  const rising  = allData.filter(d => d.direction === 'up').length;
+  const falling = allData.filter(d => d.direction === 'down').length;
+  const stable  = allData.filter(d => d.direction === 'stable').length;
+  document.getElementById('stat-total').textContent   = allData.length;
+  document.getElementById('stat-rising').textContent  = rising;
+  document.getElementById('stat-falling').textContent = falling;
+  document.getElementById('stat-stable').textContent  = stable;
+}
+
+// ── Ticker ────────────────────────────────────────────────────────────────────
+function renderTicker() {
+  const items = [...allData]
+    .filter(d => d.price_change_pct != null)
+    .sort((a,b) => Math.abs(b.price_change_pct) - Math.abs(a.price_change_pct))
+    .slice(0, 15);
+  const src = items.length ? items : allData.slice(0,15);
+  const html = [...src, ...src].map(d => {
+    const dir  = d.direction || 'stable';
+    const pct  = d.price_change_pct;
+    const sign = pct > 0 ? '+' : '';
+    const arrow = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '—';
+    return `<div class="ticker-item">
+      <span class="ticker-name">${d.name_english}</span>
+      <span class="ticker-price">Rs ${Math.round(d.avg_price)}/${d.unit}</span>
+      <span class="ticker-change ${dir}">${arrow} ${pct != null ? sign+pct.toFixed(1)+'%' : '—'}</span>
+    </div>`;
+  }).join('');
+  document.getElementById('ticker').innerHTML = html;
+}
+
+// ── Filter + Sort ─────────────────────────────────────────────────────────────
+function getFiltered() {
+  let data = [...allData];
+
+  // category
+  if (activeTab !== 'all') data = data.filter(d => d.category === activeTab);
+
+  // direction pills
+  if (activeDirs.size > 0) data = data.filter(d => activeDirs.has(d.direction || 'stable'));
+
+  // search
+  const q = searchQ.toLowerCase().trim();
+  if (q) data = data.filter(d =>
+    d.name_english.toLowerCase().includes(q) ||
+    (d.name_urdu || '').includes(q)
+  );
+
+  // sort
+  data.sort((a, b) => {
+    switch (sortKey) {
+      case 'name-asc':    return a.name_english.localeCompare(b.name_english);
+      case 'name-desc':   return b.name_english.localeCompare(a.name_english);
+      case 'price-asc':   return a.avg_price - b.avg_price;
+      case 'price-desc':  return b.avg_price - a.avg_price;
+      case 'change-desc': return (b.price_change_pct ?? -999) - (a.price_change_pct ?? -999);
+      case 'change-asc':  return (a.price_change_pct ?? 999)  - (b.price_change_pct ?? 999);
+      default: return 0;
+    }
+  });
+
+  return data;
+}
+
+// ── Table ─────────────────────────────────────────────────────────────────────
+function renderTable() {
+  const data = getFiltered();
+  document.getElementById('result-count').textContent =
+    `Showing ${data.length} of ${allData.length} items`;
+
+  if (!data.length) {
+    document.getElementById('table-container').innerHTML =
+      `<div class="state-wrap">No items match your filters.</div>`;
+    return;
+  }
+
+  const rows = data.map(d => {
+    const pct   = d.price_change_pct;
+    const dir   = d.direction || 'stable';
+    const sign  = pct > 0 ? '+' : '';
+    const arrow = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '→';
+    const pctTxt = pct != null ? `${sign}${pct.toFixed(1)}%` : '—';
+    const catLabel = d.category.replace(/_/g, ' ');
+    return `<tr>
+      <td>
+        <div class="item-name-en">${d.name_english}</div>
+        ${d.name_urdu ? `<span class="item-name-ur">${d.name_urdu}</span>` : ''}
+      </td>
+      <td><span class="cat-badge ${d.category}">${catLabel}</span></td>
+      <td>
+        <div class="price-cell">Rs ${Math.round(d.avg_price)}</div>
+        <div class="price-range">${d.min_price}–${d.max_price} / ${d.unit}</div>
+      </td>
+      <td class="change-cell">
+        <span class="change-pill ${dir}">${arrow} ${pctTxt}</span>
+      </td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('table-container').innerHTML = `
+    <table class="price-table">
+      <thead><tr>
+        <th data-sort="name-asc">Item <span class="sort-icon">↕</span></th>
+        <th>Category</th>
+        <th data-sort="price-asc">Price <span class="sort-icon">↕</span></th>
+        <th data-sort="change-desc" style="text-align:right">Change <span class="sort-icon">↕</span></th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+  // column sort click
+  document.querySelectorAll('.price-table th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const s = th.dataset.sort;
+      if (sortKey === s) {
+        // toggle asc/desc
+        if (s.endsWith('-asc')) sortKey = s.replace('-asc','-desc');
+        else sortKey = s.replace('-desc','-asc');
+      } else {
+        sortKey = s;
+      }
+      document.getElementById('sort-select').value = sortKey;
+      renderTable();
+    });
+  });
+}
+
+// ── Movers ────────────────────────────────────────────────────────────────────
+function renderMovers() {
+  const withChange = allData.filter(d => d.price_change_pct != null);
+  const gainers = [...withChange].sort((a,b) => b.price_change_pct - a.price_change_pct).slice(0,5);
+  const losers  = [...withChange].sort((a,b) => a.price_change_pct - b.price_change_pct).slice(0,5);
+
+  const row = (d, dir) => {
+    const sign = d.price_change_pct > 0 ? '+' : '';
+    return `<div class="mover-row">
+      <div>
+        <div class="mover-name">${d.name_english}${d.name_urdu ? ` <span style="font-family:var(--font-u);font-size:12px;color:var(--text3)">${d.name_urdu}</span>` : ''}</div>
+        <div class="mover-meta">Rs ${Math.round(d.avg_price)} / ${d.unit} · ${d.category.replace(/_/g,' ')}</div>
+      </div>
+      <span class="change-pill ${dir}">${sign}${d.price_change_pct.toFixed(1)}%</span>
+    </div>`;
+  };
+
+  document.getElementById('gainers-list').innerHTML = gainers.length
+    ? gainers.map(d => row(d,'up')).join('')
+    : '<div class="state-wrap" style="padding:20px;font-size:12px">No data yet</div>';
+
+  document.getElementById('losers-list').innerHTML = losers.length
+    ? losers.map(d => row(d,'down')).join('')
+    : '<div class="state-wrap" style="padding:20px;font-size:12px">No data yet</div>';
+}
+
+// ── Event listeners ───────────────────────────────────────────────────────────
+// Category tabs
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeTab = btn.dataset.cat;
+    renderTable();
+  });
+});
+
+// Direction pills (toggle)
+document.querySelectorAll('.dir-pill').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const dir = btn.dataset.dir;
+    if (activeDirs.has(dir)) {
+      activeDirs.delete(dir);
+      btn.classList.remove('active');
+    } else {
+      activeDirs.add(dir);
+      btn.classList.add('active');
+    }
+    renderTable();
+  });
+});
+
+// Sort select
+document.getElementById('sort-select').addEventListener('change', e => {
+  sortKey = e.target.value;
+  renderTable();
+});
+
+// Search
+document.getElementById('search').addEventListener('input', e => {
+  searchQ = e.target.value;
+  renderTable();
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+fetchData();
+setInterval(fetchData, 30 * 60 * 1000);
+</script>
+</body>
+</html>
