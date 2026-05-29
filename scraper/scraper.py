@@ -25,13 +25,21 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = os.getenv("SCRAPE_URL_BASE", "https://lahore.punjab.gov.pk")
 
-# Correct URLs confirmed from live site
+# TEST_MODE: only scrape vegetables (1 image, 1 OCR call)
+# Set to False in production
+TEST_MODE = os.getenv("TEST_MODE", "true").lower() == "true"
+
 CATEGORY_URLS = {
-    "vegetables":          f"{BASE_URL}/vegetables-rate-list",
-    "fruits":              f"{BASE_URL}/fruits-rate-list",
-    "poultry":             f"{BASE_URL}/poultry-rate-list",
-    "essential_commodities": f"{BASE_URL}/commodities-rate-list",
+    "vegetables":             f"{BASE_URL}/vegetables-rate-list",
+    "fruits":                 f"{BASE_URL}/fruits-rate-list",
+    "poultry":                f"{BASE_URL}/poultry-rate-list",
+    "essential_commodities":  f"{BASE_URL}/commodities-rate-list",
 }
+
+# In test mode only scrape one category
+if TEST_MODE:
+    CATEGORY_URLS = {"vegetables": f"{BASE_URL}/vegetables-rate-list"}
+    logger.info("TEST_MODE=true — scraping vegetables only (1 image, 1 OCR call)")
 
 HEADERS = {
     "User-Agent": (
@@ -111,7 +119,7 @@ def download_image(url: str, category: str) -> tuple[bytes, str] | None:
         with httpx.Client(headers=HEADERS, follow_redirects=True, timeout=30) as client:
             r = client.get(url)
             if r.status_code != 200:
-                logger.warning(f"Failed to download image {url}: HTTP {r.status_code}")
+                logger.warning(f"Failed to download {url}: HTTP {r.status_code}")
                 return None
 
             content = r.content
@@ -140,7 +148,7 @@ def scrape_category(category: str, url: str) -> list[dict]:
 
     html = fetch_page(url)
     if not html:
-        logger.error(f"[{category}] Could not fetch page — will trigger alert")
+        logger.error(f"[{category}] Could not fetch page")
         return results
 
     image_urls = extract_image_urls(html, BASE_URL)
@@ -148,18 +156,20 @@ def scrape_category(category: str, url: str) -> list[dict]:
 
     if not image_urls:
         logger.warning(f"[{category}] No images found — site structure may have changed")
+        return results
 
-    for img_url in image_urls:
-        result = download_image(img_url, category)
-        if result:
-            image_bytes, image_path = result
-            results.append({
-                "category":    category,
-                "image_path":  image_path,
-                "image_bytes": image_bytes,
-                "source_url":  img_url,
-                "scraped_at":  datetime.utcnow().isoformat(),
-            })
+    # Only download the FIRST (most recent) image per category
+    img_url = image_urls[0]
+    result = download_image(img_url, category)
+    if result:
+        image_bytes, image_path = result
+        results.append({
+            "category":    category,
+            "image_path":  image_path,
+            "image_bytes": image_bytes,
+            "source_url":  img_url,
+            "scraped_at":  datetime.utcnow().isoformat(),
+        })
 
     return results
 
@@ -168,6 +178,7 @@ def run_scraper() -> tuple[list[dict], list[str]]:
     logger.info("=" * 60)
     logger.info("Price Pulse Lahore — Daily Scrape Starting")
     logger.info(f"UTC: {datetime.utcnow().isoformat()}")
+    logger.info(f"Mode: {'TEST (1 category)' if TEST_MODE else 'PRODUCTION (all categories)'}")
     logger.info("=" * 60)
 
     all_results = []
@@ -184,9 +195,8 @@ def run_scraper() -> tuple[list[dict], list[str]]:
             failed_categories.append(category)
 
     logger.info(f"Scrape complete — {len(all_results)} image(s) downloaded")
-
     if failed_categories:
-        logger.warning(f"Failed categories: {failed_categories}")
+        logger.warning(f"Failed: {failed_categories}")
 
     return all_results, failed_categories
 
