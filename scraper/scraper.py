@@ -25,12 +25,12 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = os.getenv("SCRAPE_URL_BASE", "https://lahore.punjab.gov.pk")
 
-# Known category pages — extend if the gov site adds more
+# Correct URLs confirmed from live site
 CATEGORY_URLS = {
-    "vegetables": f"{BASE_URL}/vegetables-rate-list",
-    "fruits":     f"{BASE_URL}/fruit-rate-list",
-    "poultry":    f"{BASE_URL}/poultry-rate-list",
-    "commodities":f"{BASE_URL}/general-items-rate-list",
+    "vegetables":          f"{BASE_URL}/vegetables-rate-list",
+    "fruits":              f"{BASE_URL}/fruits-rate-list",
+    "poultry":             f"{BASE_URL}/poultry-rate-list",
+    "essential_commodities": f"{BASE_URL}/commodities-rate-list",
 }
 
 HEADERS = {
@@ -44,30 +44,25 @@ HEADERS = {
     "Referer": BASE_URL,
 }
 
-# Local image cache dir — keeps downloaded JPEGs for audit trail
 IMAGE_DIR = Path(__file__).parent.parent / "data" / "images"
 IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _hash_file(content: bytes) -> str:
-    """SHA-256 hash of raw bytes — used for duplicate detection."""
     return hashlib.sha256(content).hexdigest()
 
 
 def _already_downloaded(image_hash: str) -> bool:
-    """Check if this exact image was already processed today."""
     marker = IMAGE_DIR / f"{image_hash}.processed"
     return marker.exists()
 
 
 def _mark_downloaded(image_hash: str) -> None:
-    """Mark image as processed so we skip it next run."""
     marker = IMAGE_DIR / f"{image_hash}.processed"
     marker.touch()
 
 
 def fetch_page(url: str, retries: int = 3) -> str | None:
-    """Fetch HTML from a URL with retry logic."""
     for attempt in range(1, retries + 1):
         try:
             with httpx.Client(headers=HEADERS, follow_redirects=True, timeout=20) as client:
@@ -77,36 +72,29 @@ def fetch_page(url: str, retries: int = 3) -> str | None:
                 logger.warning(f"HTTP {r.status_code} on attempt {attempt} for {url}")
         except httpx.RequestError as e:
             logger.warning(f"Request error on attempt {attempt}: {e}")
-        time.sleep(2 ** attempt)  # exponential backoff
+        time.sleep(2 ** attempt)
     return None
 
 
 def extract_image_urls(html: str, base_url: str) -> list[str]:
-    """
-    Parse HTML and extract all image URLs that look like rate list JPEGs.
-    The gov site embeds them as <img> tags or links to JPEGs directly.
-    """
     soup = BeautifulSoup(html, "html.parser")
     image_urls = []
 
-    # Strategy 1: <img> tags with src pointing to rate images
     for img in soup.find_all("img"):
         src = img.get("src", "")
-        if any(kw in src.lower() for kw in ["rate", "price", "market", "list"]):
+        if any(kw in src.lower() for kw in ["rate", "price", "market", "list", "vegetable", "poultry", "fruit", "whatsapp", "system/files"]):
             full_url = src if src.startswith("http") else f"{base_url}/{src.lstrip('/')}"
             image_urls.append(full_url)
 
-    # Strategy 2: <a> tags linking directly to JPEGs / PNGs
     for a in soup.find_all("a", href=True):
         href = a["href"]
         if href.lower().endswith((".jpg", ".jpeg", ".png")):
             full_url = href if href.startswith("http") else f"{base_url}/{href.lstrip('/')}"
             image_urls.append(full_url)
 
-    # Strategy 3: Any <img> inside content/article area (fallback)
     if not image_urls:
         content_area = soup.find(class_=lambda c: c and any(
-            kw in c.lower() for kw in ["content", "main", "article", "body"]
+            kw in c.lower() for kw in ["content", "main", "article", "body", "field"]
         ))
         if content_area:
             for img in content_area.find_all("img"):
@@ -115,14 +103,10 @@ def extract_image_urls(html: str, base_url: str) -> list[str]:
                     full_url = src if src.startswith("http") else f"{base_url}/{src.lstrip('/')}"
                     image_urls.append(full_url)
 
-    return list(dict.fromkeys(image_urls))  # deduplicate, preserve order
+    return list(dict.fromkeys(image_urls))
 
 
 def download_image(url: str, category: str) -> tuple[bytes, str] | None:
-    """
-    Download an image. Returns (raw_bytes, local_path) or None on failure.
-    Skips if already downloaded today (hash check).
-    """
     try:
         with httpx.Client(headers=HEADERS, follow_redirects=True, timeout=30) as client:
             r = client.get(url)
@@ -134,10 +118,9 @@ def download_image(url: str, category: str) -> tuple[bytes, str] | None:
             image_hash = _hash_file(content)
 
             if _already_downloaded(image_hash):
-                logger.info(f"[{category}] Image already processed (hash match), skipping.")
+                logger.info(f"[{category}] Already processed (hash match), skipping.")
                 return None
 
-            # Save image with date + category in filename
             date_str = datetime.now().strftime("%Y-%m-%d")
             filename = IMAGE_DIR / f"{date_str}_{category}_{image_hash[:8]}.jpg"
             filename.write_bytes(content)
@@ -152,13 +135,6 @@ def download_image(url: str, category: str) -> tuple[bytes, str] | None:
 
 
 def scrape_category(category: str, url: str) -> list[dict]:
-    """
-    Full pipeline for one category:
-    1. Fetch the page HTML
-    2. Extract image URLs
-    3. Download new images
-    Returns list of {category, image_path, image_bytes, url, scraped_at}
-    """
     logger.info(f"[{category}] Scraping {url}")
     results = []
 
@@ -171,7 +147,7 @@ def scrape_category(category: str, url: str) -> list[dict]:
     logger.info(f"[{category}] Found {len(image_urls)} image(s)")
 
     if not image_urls:
-        logger.warning(f"[{category}] No images found on page — site structure may have changed")
+        logger.warning(f"[{category}] No images found — site structure may have changed")
 
     for img_url in image_urls:
         result = download_image(img_url, category)
@@ -188,11 +164,7 @@ def scrape_category(category: str, url: str) -> list[dict]:
     return results
 
 
-def run_scraper() -> list[dict]:
-    """
-    Entry point — scrape all categories.
-    Returns all successfully downloaded images ready for OCR.
-    """
+def run_scraper() -> tuple[list[dict], list[str]]:
     logger.info("=" * 60)
     logger.info("Price Pulse Lahore — Daily Scrape Starting")
     logger.info(f"UTC: {datetime.utcnow().isoformat()}")

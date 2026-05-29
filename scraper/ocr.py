@@ -8,8 +8,8 @@ import json
 import logging
 import os
 import re
+import time
 from datetime import datetime
-from pathlib import Path
 import io
 
 from dotenv import load_dotenv
@@ -21,11 +21,13 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# New google-genai SDK
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-# gemini-1.5-flash: free tier, 1500 req/day, excellent vision
-MODEL_NAME = "gemini-1.5-flash"
+# gemini-2.0-flash: free tier
+MODEL_NAME = "gemini-2.0-flash"
+
+# Rate limit: respect free tier (15 RPM = 1 request per 4 seconds minimum)
+REQUEST_DELAY_SECONDS = 5
 
 EXTRACTION_PROMPT = """
 You are a data extraction assistant. This image is a daily market rate list
@@ -58,7 +60,6 @@ Example output:
 
 
 def image_bytes_to_pil(image_bytes: bytes) -> Image.Image:
-    """Convert raw bytes to PIL Image."""
     return Image.open(io.BytesIO(image_bytes))
 
 
@@ -67,12 +68,9 @@ def extract_prices_from_image(
     category: str,
     source_url: str,
     scraped_at: str,
+    retry_on_429: bool = True,
 ) -> list[dict]:
-    """
-    Send image to Gemini Vision and extract structured price data.
-    Returns list of price records ready for DB insertion.
-    """
-    logger.info(f"[OCR] Processing {category} image via Gemini Flash")
+    logger.info(f"[OCR] Processing {category} via {MODEL_NAME}")
 
     try:
         image = image_bytes_to_pil(image_bytes)
@@ -87,9 +85,6 @@ def extract_prices_from_image(
         )
 
         raw_text = response.text.strip()
-        logger.debug(f"[OCR] Raw Gemini response ({len(raw_text)} chars)")
-
-        # Strip any accidental markdown fences
         raw_text = re.sub(r"^```(?:json)?\s*", "", raw_text)
         raw_text = re.sub(r"\s*```$", "", raw_text)
         raw_text = raw_text.strip()
@@ -105,7 +100,6 @@ def extract_prices_from_image(
         for item in items:
             if not item.get("name_english"):
                 continue
-
             records.append({
                 "name_urdu":    item.get("name_urdu", ""),
                 "name_english": item["name_english"].strip().title(),
@@ -120,12 +114,24 @@ def extract_prices_from_image(
             })
 
         logger.info(f"[OCR] Extracted {len(records)} items from {category}")
+
+        # Respect rate limits between requests
+        time.sleep(REQUEST_DELAY_SECONDS)
         return records
 
-    except json.JSONDecodeError as e:
-        logger.error(f"[OCR] JSON parse failed for {category}: {e}")
-        return []
     except Exception as e:
+        err_str = str(e)
+        if "429" in err_str and retry_on_429:
+            # Extract retry delay from error message if available
+            retry_delay = 65  # default: wait 65 seconds
+            match = re.search(r"retry in (\d+)", err_str)
+            if match:
+                retry_delay = int(match.group(1)) + 5
+            logger.warning(f"[OCR] Rate limited — waiting {retry_delay}s before retry...")
+            time.sleep(retry_delay)
+            return extract_prices_from_image(
+                image_bytes, category, source_url, scraped_at, retry_on_429=False
+            )
         logger.error(f"[OCR] Gemini API error for {category}: {e}")
         return []
 
@@ -133,12 +139,23 @@ def extract_prices_from_image(
 def process_all_images(scraped_images: list[dict]) -> tuple[list[dict], list[str]]:
     """
     Run OCR on all scraped images.
-    Returns (all_price_records, failed_categories)
+    Only processes the LATEST image per category to stay within free quota.
     """
     all_records = []
     failed = []
 
+    # Group by category — only process the first (most recent) image per category
+    seen_categories = set()
+    images_to_process = []
     for image_data in scraped_images:
+        cat = image_data["category"]
+        if cat not in seen_categories:
+            images_to_process.append(image_data)
+            seen_categories.add(cat)
+
+    logger.info(f"[OCR] Processing {len(images_to_process)} images (1 per category)")
+
+    for image_data in images_to_process:
         category = image_data["category"]
         records = extract_prices_from_image(
             image_bytes=image_data["image_bytes"],
@@ -169,3 +186,4 @@ if __name__ == "__main__":
 
     records = extract_prices_from_image(img_bytes, cat, "local_test", datetime.utcnow().isoformat())
     print(json.dumps(records, ensure_ascii=False, indent=2))
+    print(f"\nTotal: {len(records)} items extracted")
