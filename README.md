@@ -4,7 +4,7 @@
 > AI-powered OCR from Punjab Government official data. Built by [QA Pulse by SK](https://skakarh.com)
 
 [![Live UI](https://img.shields.io/badge/Live-GitHub%20Pages-blue)](https://shahnawazkakarh.github.io/price-pulse-lahore)
-[![API Docs](https://img.shields.io/badge/API-FastAPI-green)](https://price-pulse-lahore.up.railway.app/docs)
+[![API Docs](https://img.shields.io/badge/API-FastAPI-green)](https://price-pulse-lahore.vercel.app/docs)
 [![Data Source](https://img.shields.io/badge/Data-Punjab%20Govt-orange)](https://lahore.punjab.gov.pk/market_rates)
 [![Python](https://img.shields.io/badge/Python-3.12-blue)](https://python.org)
 [![Model](https://img.shields.io/badge/AI-Gemini%202.5%20Flash-purple)](https://aistudio.google.com)
@@ -24,8 +24,8 @@ People of Lahore can check today's prices, see what went up or down, search item
 | Resource | URL |
 |---|---|
 | Live UI | https://shahnawazkakarh.github.io/price-pulse-lahore |
-| API | https://price-pulse-lahore.up.railway.app |
-| API Docs | https://price-pulse-lahore.up.railway.app/docs |
+| API | https://price-pulse-lahore.vercel.app |
+| API Docs | https://price-pulse-lahore.vercel.app/docs |
 | Data Source | https://lahore.punjab.gov.pk/market_rates |
 
 ---
@@ -246,28 +246,35 @@ git push origin master
 
 ---
 
-## Railway Deployment
+## Vercel Deployment (API)
 
 ```bash
 # 1. Push to GitHub
 git push origin master
 
-# 2. Connect to Railway
-# railway.app → New Project → Deploy from GitHub repo
+# 2. Go to vercel.com → New Project → Import from GitHub
+# Select: ShahnawazKakarh/price-pulse-lahore
+# Framework: Other
 
-# 3. Add environment variables in Railway dashboard:
+# 3. Add environment variables in Vercel dashboard:
 GEMINI_API_KEY=your_key
-DATABASE_URL=your_railway_postgres_url
-TELEGRAM_BOT_TOKEN=your_bot_token   # optional
-TELEGRAM_CHAT_ID=your_chat_id       # optional
+DATABASE_URL=your_supabase_pooler_url
 TEST_MODE=false
+ENV=production
 
-# 4. Add PostgreSQL plugin in Railway dashboard
-# Railway auto-sets DATABASE_URL
+# 4. Deploy — API live at price-pulse-lahore.vercel.app
+```
 
-# 5. Add cron job in Railway:
-# Command:  python scraper/pipeline.py
-# Schedule: 30 2 * * *   (2:30am UTC = 7:30am PKT)
+## GitHub Actions Cron Job
+
+```bash
+# Runs automatically at 2:30 AM UTC (7:30 AM PKT) daily
+# Add secrets in: github.com/ShahnawazKakarh/price-pulse-lahore/settings/secrets/actions
+# Required: GEMINI_API_KEY, DATABASE_URL
+# Optional: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+
+# Manual trigger:
+# GitHub → Actions → Daily Price Pipeline → Run workflow
 ```
 
 ---
