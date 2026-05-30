@@ -1,0 +1,46 @@
+name: Daily Price Pipeline
+
+on:
+  schedule:
+    # 2:30 AM UTC = 7:30 AM PKT (Pakistan Standard Time)
+    - cron: '30 2 * * *'
+  workflow_dispatch:  # allow manual trigger from GitHub Actions tab
+
+jobs:
+  scrape-and-ocr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Create data directories
+        run: mkdir -p data/images data/daily
+
+      - name: Run pipeline
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TEST_MODE: 'false'
+          ENV: production
+        run: python scraper/pipeline.py
+
+      - name: Upload daily JSON as artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: daily-prices-${{ github.run_id }}
+          path: data/daily/
+          retention-days: 30
