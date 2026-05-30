@@ -1,96 +1,288 @@
 # Price Pulse Lahore
 
-> Live daily market rates for Lahore — vegetables, fruits, poultry & commodities.  
-> Powered by AI Vision OCR · Built by [QA Pulse by SK](https://skakarh.com)
+> Live daily market rates for Lahore — vegetables, fruits, poultry & essential commodities.
+> AI-powered OCR from Punjab Government official data. Built by [QA Pulse by SK](https://skakarh.com)
 
 [![Live UI](https://img.shields.io/badge/Live-GitHub%20Pages-blue)](https://shahnawazkakarh.github.io/price-pulse-lahore)
-[![API](https://img.shields.io/badge/API-FastAPI-green)](https://price-pulse-lahore.up.railway.app/docs)
-[![Data Source](https://img.shields.io/badge/Data-Punjab%20Gov-orange)](https://lahore.punjab.gov.pk/market_rates)
+[![API Docs](https://img.shields.io/badge/API-FastAPI-green)](https://price-pulse-lahore.up.railway.app/docs)
+[![Data Source](https://img.shields.io/badge/Data-Punjab%20Govt-orange)](https://lahore.punjab.gov.pk/market_rates)
+[![Python](https://img.shields.io/badge/Python-3.12-blue)](https://python.org)
+[![Model](https://img.shields.io/badge/AI-Gemini%202.5%20Flash-purple)](https://aistudio.google.com)
 
 ---
 
 ## What is this?
 
-**Price Pulse Lahore** automatically scrapes the official Punjab Government daily market rate JPEGs, extracts structured price data using Google Gemini Vision AI, stores it in a time-series database, and serves it via a REST API with a live ticker UI.
+**Price Pulse Lahore** automatically scrapes the official Punjab Government daily market rate JPEGs, extracts structured price data using **Google Gemini 2.5 Flash Vision AI**, stores it in a time-series database, and serves it via a REST API with a live ticker UI.
 
-People of Lahore can check today's prices, see what went up or down, and track trends — without navigating government websites.
+People of Lahore can check today's prices, see what went up or down, search items, and filter by category — without navigating government websites.
 
-## Features (Roadmap)
+---
 
-- [x] Automated daily scraper (runs at 7:30am PKT)
-- [x] AI Vision OCR — Gemini Flash extracts prices from government JPEGs
+## Live Links
+
+| Resource | URL |
+|---|---|
+| Live UI | https://shahnawazkakarh.github.io/price-pulse-lahore |
+| API | https://price-pulse-lahore.up.railway.app |
+| API Docs | https://price-pulse-lahore.up.railway.app/docs |
+| Data Source | https://lahore.punjab.gov.pk/market_rates |
+
+---
+
+## Features
+
+- [x] Automated daily scraper — runs at 7:30am PKT via Railway cron
+- [x] AI Vision OCR — Gemini 2.5 Flash extracts prices from government JPEGs
 - [x] Failure alerts via Telegram
-- [ ] PostgreSQL + TimescaleDB time-series storage (Week 2)
-- [ ] REST API with FastAPI (Week 3)
-- [ ] Live ticker UI on GitHub Pages (Week 4)
+- [x] PostgreSQL + TimescaleDB time-series storage
+- [x] REST API with FastAPI — 8 endpoints, rate limiting, CORS
+- [x] Live ticker UI on GitHub Pages — search, filters, sort, movers
+- [x] JSON fallback — works without database
 - [ ] Price trend charts (Phase 2)
 - [ ] Price alerts / notifications (Phase 2)
 - [ ] AI price forecasting (Phase 3)
+
+---
 
 ## Project Structure
 
 ```
 price-pulse-lahore/
 ├── scraper/
-│   ├── scraper.py      # Fetches images from gov site
-│   ├── ocr.py          # Gemini Vision extracts prices from images
-│   └── pipeline.py     # Orchestrates daily run
-├── api/                # FastAPI REST API (Week 3)
-├── db/                 # Database models & migrations (Week 2)
+│   ├── scraper.py         # Fetches images from gov site (1 per category)
+│   ├── ocr.py             # Gemini 2.5 Flash extracts prices from images
+│   └── pipeline.py        # Orchestrates: scrape → OCR → DB/JSON
+├── api/
+│   └── main.py            # FastAPI — 8 REST endpoints
+├── db/
+│   ├── models.py          # SQLAlchemy ORM: items, price_readings, scrape_logs
+│   ├── database.py        # Connection, sessions, TimescaleDB setup
+│   └── crud.py            # Fuzzy matching, price upsert, query helpers
 ├── alerts/
-│   └── telegram.py     # Failure alerting
-├── docs/               # GitHub Pages UI (Week 4)
-├── data/               # Local image cache & daily JSON output
-├── requirements.txt
-└── .env.example
+│   └── telegram.py        # Failure alerting via Telegram bot
+├── alembic/               # DB migration versioning
+├── docs/
+│   └── index.html         # GitHub Pages live UI
+├── data/
+│   ├── images/            # Downloaded JPEGs (local cache)
+│   └── daily/             # OCR output JSON (DB fallback)
+├── .env.example           # Environment variable template
+├── requirements.txt       # Python dependencies
+├── setup.sh               # One-command setup script
+├── railway.toml           # Railway deployment config
+└── Procfile               # Process definitions
 ```
 
-## Setup (Local Dev)
+---
+
+## Quick Start
+
+### 1. Clone & setup
 
 ```bash
 git clone https://github.com/ShahnawazKakarh/price-pulse-lahore.git
 cd price-pulse-lahore
-
-python -m venv venv
-source venv/bin/activate
-
-pip install -r requirements.txt
-
-cp .env.example .env
-# Fill in GEMINI_API_KEY, DATABASE_URL, TELEGRAM_BOT_TOKEN
+chmod +x setup.sh
+./setup.sh
 ```
 
-### Run the pipeline manually
+### 2. Configure environment
+
+```bash
+cp .env.example .env
+# Edit .env and fill in your keys
+```
+
+| Variable | Where to get it | Required |
+|---|---|---|
+| `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com) → Get API Key | ✅ Yes |
+| `DATABASE_URL` | Railway Postgres or local PostgreSQL | Production |
+| `TELEGRAM_BOT_TOKEN` | [@BotFather](https://t.me/BotFather) on Telegram | Optional |
+| `TELEGRAM_CHAT_ID` | [@userinfobot](https://t.me/userinfobot) on Telegram | Optional |
+| `TEST_MODE` | `true` = vegetables only, `false` = all 4 categories | Optional |
+
+> **Gemini model used:** `gemini-2.5-flash` — free tier, 20 RPD, 5 RPM
+> Requires `google-genai >= 2.7.0` — install via `pip install --upgrade google-genai`
+
+### 3. Activate virtual environment
+
+```bash
+# Required in every new terminal session
+source venv/bin/activate
+```
+
+### 4. Run the pipeline
 
 ```bash
 python scraper/pipeline.py
 ```
 
-### Test Telegram alerts
+### 5. Start the API
 
 ```bash
+uvicorn api.main:app --reload --port 8000
+# Docs at: http://localhost:8000/docs
+```
+
+### 6. Open the UI
+
+```bash
+open docs/index.html
+```
+
+---
+
+## API Endpoints
+
+| Method | Endpoint | Description | Rate limit |
+|---|---|---|---|
+| GET | `/` | API info and endpoint list | — |
+| GET | `/health` | Health check — DB status, latest data | — |
+| GET | `/today` | All prices for today (`?category=` filter) | 60/min |
+| GET | `/movers` | Top gainers and losers today | 60/min |
+| GET | `/categories` | Summary stats per category | 60/min |
+| GET | `/search?q=tomato` | Search by name (English or Urdu) | 30/min |
+| GET | `/item/{slug}` | Single item current price | 60/min |
+| GET | `/item/{slug}/history` | Price history — requires DB | 30/min |
+
+---
+
+## Useful Commands
+
+```bash
+# ── Setup ──────────────────────────────────────────────────────────────────
+# One-time setup
+chmod +x setup.sh && ./setup.sh
+
+# Activate venv (every new terminal)
+source venv/bin/activate
+
+# Install / upgrade dependencies
+pip install -r requirements.txt
+pip install --upgrade google-genai   # must be >= 2.7.0
+
+# ── Pipeline ───────────────────────────────────────────────────────────────
+# Run full pipeline (scrape → OCR → save)
+python scraper/pipeline.py
+
+# Force re-download (clear processed markers)
+find data/images/ -name "*.processed" -delete && python scraper/pipeline.py
+
+# Test OCR on a single image
+python scraper/ocr.py data/images/your_image.jpg vegetables
+
+# ── API ────────────────────────────────────────────────────────────────────
+# Start API (development, auto-reload)
+uvicorn api.main:app --reload --port 8000
+
+# Start API (production)
+uvicorn api.main:app --host 0.0.0.0 --port 8000
+
+# Quick API checks
+curl http://localhost:8000/health
+curl http://localhost:8000/today | python3 -m json.tool
+curl http://localhost:8000/movers | python3 -m json.tool
+curl "http://localhost:8000/search?q=tomato"
+
+# ── Database ───────────────────────────────────────────────────────────────
+# Initialise DB manually
+python db/database.py
+
+# Run migrations
+alembic upgrade head
+
+# ── Data ───────────────────────────────────────────────────────────────────
+# Check today's extracted data
+cat data/daily/$(date +%Y-%m-%d).json | python3 -m json.tool
+
+# List all daily JSON files
+ls -la data/daily/
+
+# List downloaded images
+ls -la data/images/
+
+# ── Alerts ─────────────────────────────────────────────────────────────────
+# Test Telegram alerts
 python alerts/telegram.py
+
+# ── Git ────────────────────────────────────────────────────────────────────
+git add -A
+git commit -m "your message"
+git push origin master
 ```
 
-### Test OCR on a local image
+---
+
+## Environment Modes
+
+| Mode | Setting | Behaviour |
+|---|---|---|
+| Development | `TEST_MODE=true` | Scrapes vegetables only — 1 OCR call |
+| Production | `TEST_MODE=false` | All 4 categories — 4 OCR calls/day |
+| No DB | `DATABASE_URL` not set | Falls back to `data/daily/*.json` |
+
+---
+
+## Gemini API Notes
+
+- **Model:** `gemini-2.5-flash` (requires SDK >= 2.7.0)
+- **Free tier limits:** 20 requests/day, 5 requests/minute
+- **We use:** 4 OCR calls/day (1 per category) — well within free limits
+- **Quota resets:** midnight Pacific Time (1pm PKT)
+- **Key source:** [aistudio.google.com/app/api-keys](https://aistudio.google.com/app/api-keys)
+- **Important:** Create key with **no application restrictions**
+
+---
+
+## Railway Deployment
 
 ```bash
-python scraper/ocr.py path/to/rate_image.jpg vegetables
+# 1. Push to GitHub
+git push origin master
+
+# 2. Connect to Railway
+# railway.app → New Project → Deploy from GitHub repo
+
+# 3. Add environment variables in Railway dashboard:
+GEMINI_API_KEY=your_key
+DATABASE_URL=your_railway_postgres_url
+TELEGRAM_BOT_TOKEN=your_bot_token   # optional
+TELEGRAM_CHAT_ID=your_chat_id       # optional
+TEST_MODE=false
+
+# 4. Add PostgreSQL plugin in Railway dashboard
+# Railway auto-sets DATABASE_URL
+
+# 5. Add cron job in Railway:
+# Command:  python scraper/pipeline.py
+# Schedule: 30 2 * * *   (2:30am UTC = 7:30am PKT)
 ```
 
-## Environment Variables
-
-| Variable | Description |
-|---|---|
-| `GEMINI_API_KEY` | Google AI Studio API key (free) |
-| `DATABASE_URL` | PostgreSQL connection string |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token for alerts |
-| `TELEGRAM_CHAT_ID` | Your Telegram chat ID |
+---
 
 ## Data Source
 
-Official daily market rates published by the **Government of Punjab, Lahore**.  
+Official daily market rates published by the **Government of Punjab, Lahore**.
 Source: [lahore.punjab.gov.pk/market_rates](https://lahore.punjab.gov.pk/market_rates)
+
+Data is extracted from WhatsApp-forwarded JPEG images using Google Gemini 2.5 Flash Vision AI.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Scraper | Python 3.12, httpx, BeautifulSoup |
+| AI OCR | Google Gemini 2.5 Flash Vision |
+| Database | PostgreSQL + TimescaleDB |
+| ORM | SQLAlchemy + Alembic |
+| API | FastAPI, uvicorn, slowapi |
+| Fuzzy matching | rapidfuzz |
+| Alerts | Telegram Bot API |
+| Frontend | Vanilla JS, GitHub Pages |
+| Hosting | Railway |
 
 ---
 
