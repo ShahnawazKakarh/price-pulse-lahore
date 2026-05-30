@@ -179,7 +179,18 @@ uvicorn api.main:app --reload --port 8000
 # Start API (production)
 uvicorn api.main:app --host 0.0.0.0 --port 8000
 
-# Quick API checks
+# Open in browser (Mac)
+open http://localhost:8000/docs                               # Interactive API docs
+open http://localhost:8000/today                              # Today's prices
+open http://localhost:8000/health                             # Health check
+
+# Open live GitHub Pages UI
+open https://shahnawazkakarh.github.io/price-pulse-lahore
+
+# Open local UI (needs API running on port 8000)
+open docs/index.html
+
+# Quick API checks via curl
 curl http://localhost:8000/health
 curl http://localhost:8000/today | python3 -m json.tool
 curl http://localhost:8000/movers | python3 -m json.tool
