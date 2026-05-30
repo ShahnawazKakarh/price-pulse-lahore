@@ -32,16 +32,30 @@ People of Lahore can check today's prices, see what went up or down, search item
 
 ## Features
 
-- [x] Automated daily scraper — runs at 7:30am PKT via Railway cron
+- [x] Automated daily scraper — runs at 7:30am PKT via GitHub Actions cron
 - [x] AI Vision OCR — Gemini 2.5 Flash extracts prices from government JPEGs
 - [x] Failure alerts via Telegram
-- [x] PostgreSQL + TimescaleDB time-series storage
-- [x] REST API with FastAPI — 8 endpoints, rate limiting, CORS
+- [x] PostgreSQL + Supabase time-series storage
+- [x] REST API with FastAPI — 12 endpoints, rate limiting, CORS
 - [x] Live ticker UI on GitHub Pages — search, filters, sort, movers
-- [x] JSON fallback — works without database
-- [ ] Price trend charts (Phase 2)
-- [ ] Price alerts / notifications (Phase 2)
-- [ ] AI price forecasting (Phase 3)
+- [x] 7-day sparkline trend charts per item
+- [x] Basket calculator — select items, see total grocery cost
+- [x] Item detail modal with price chart
+- [x] Category summary cards with inflation signal
+- [x] Alert banner — biggest price mover of the day
+- [x] Urdu / bilingual toggle (RTL support)
+- [x] Analytics API — anomaly detection, inflation index, linear forecast
+
+### 🤖 ML Roadmap
+
+| Phase | Timeline | Feature | Method |
+|---|---|---|---|
+| **Phase 1** | ✅ Live | Anomaly detection, inflation index, linear forecast | Rule-based + statistics |
+| **Phase 2** | 30 days data | Z-score anomalies, day-of-week patterns, moving averages | Statistical models |
+| **Phase 3** | 90 days data | Price forecasting with confidence bands, seasonal decomposition | Meta Prophet |
+| **Phase 4** | 6 months data | LSTM predictions, Ramadan price tracker, correlation matrix | TensorFlow / PyTorch |
+
+> Data collection started May 2026. ML models activate automatically as historical data grows.
 
 ---
 
@@ -54,7 +68,8 @@ price-pulse-lahore/
 │   ├── ocr.py             # Gemini 2.5 Flash extracts prices from images
 │   └── pipeline.py        # Orchestrates: scrape → OCR → DB/JSON
 ├── api/
-│   └── main.py            # FastAPI — 8 REST endpoints
+│   ├── main.py            # FastAPI — 12 REST endpoints
+│   └── analytics.py       # ML & Analytics endpoints
 ├── db/
 │   ├── models.py          # SQLAlchemy ORM: items, price_readings, scrape_logs
 │   ├── database.py        # Connection, sessions, TimescaleDB setup
@@ -135,6 +150,8 @@ open docs/index.html
 
 ## API Endpoints
 
+### Core Prices
+
 | Method | Endpoint | Description | Rate limit |
 |---|---|---|---|
 | GET | `/` | API info and endpoint list | — |
@@ -143,6 +160,17 @@ open docs/index.html
 | GET | `/movers` | Top gainers and losers today | 60/min |
 | GET | `/categories` | Summary stats per category | 60/min |
 | GET | `/search?q=tomato` | Search by name (English or Urdu) | 30/min |
+| GET | `/item/{slug}` | Single item current price | 60/min |
+| GET | `/item/{slug}/history` | Price history — requires DB | 30/min |
+
+### Analytics & ML
+
+| Method | Endpoint | Description | Phase |
+|---|---|---|---|
+| GET | `/analytics/summary` | Market inflation signal per category | ✅ Live |
+| GET | `/analytics/anomalies` | Unusual price movements (`?threshold=10`) | ✅ Live |
+| GET | `/analytics/forecast/{slug}` | 7-day price forecast with confidence bands | ✅ Live (linear) |
+| GET | `/analytics/inflation-index` | Lahore market price index over time | ✅ Live |
 | GET | `/item/{slug}` | Single item current price | 60/min |
 | GET | `/item/{slug}/history` | Price history — requires DB | 30/min |
 
