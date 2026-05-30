@@ -456,10 +456,14 @@
 
 <script>
 // ── Config ────────────────────────────────────────────────────────────────────
-const IS_GITHUB  = location.hostname.includes('github.io') || location.hostname.includes('skakarh.com');
+const IS_GITHUB   = location.hostname.includes('github.io') || location.hostname.includes('skakarh.com');
 const RAILWAY_URL = 'https://price-pulse-lahore.up.railway.app'; // update after Railway deploy
 const LOCAL_URL   = 'http://localhost:8000';
 const BASE        = IS_GITHUB ? RAILWAY_URL : LOCAL_URL;
+
+// Embedded fallback data — real OCR data, updated on each commit
+// This ensures GitHub Pages always shows data even before Railway is live
+const FALLBACK_DATA = {"date":"2026-05-30","count":23,"data":[{"name_urdu":"شملہ مرچ","name_english":"Capsicum","unit":"kg","min_price":90,"max_price":90,"quality":"A","category":"vegetables","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":90},{"name_urdu":"شملہ مرچ","name_english":"Capsicum B","unit":"kg","min_price":85,"max_price":85,"quality":"B","category":"vegetables","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":85},{"name_urdu":"شلجم","name_english":"Turnip","unit":"kg","min_price":60,"max_price":60,"quality":"A","category":"vegetables","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":60},{"name_urdu":"شلجم","name_english":"Turnip B","unit":"kg","min_price":57,"max_price":57,"quality":"B","category":"vegetables","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":57},{"name_urdu":"آم کچا","name_english":"Raw Mango","unit":"kg","min_price":40,"max_price":40,"quality":"A","category":"fruits","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":40},{"name_urdu":"آم کچا","name_english":"Raw Mango B","unit":"kg","min_price":38,"max_price":38,"quality":"B","category":"fruits","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":38},{"name_urdu":"آم سہارنی","name_english":"Saharni Mango","unit":"kg","min_price":165,"max_price":165,"quality":"A","category":"fruits","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":165},{"name_urdu":"آم سہارنی","name_english":"Saharni Mango B","unit":"kg","min_price":157,"max_price":157,"quality":"B","category":"fruits","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":157},{"name_urdu":"آم سندھڑی اول","name_english":"Sindhri Mango A","unit":"kg","min_price":285,"max_price":285,"quality":"A","category":"fruits","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":285},{"name_urdu":"آم سندھڑی دوئم","name_english":"Sindhri Mango B","unit":"kg","min_price":230,"max_price":230,"quality":"B","category":"fruits","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":230},{"name_urdu":"آم دوسری","name_english":"Doosri Mango","unit":"kg","min_price":270,"max_price":270,"quality":"A","category":"fruits","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":270},{"name_urdu":"فارم گیٹ ریٹ زندہ","name_english":"Farm Gate Live","unit":"kg","min_price":300,"max_price":300,"quality":"","category":"poultry","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":300},{"name_urdu":"برائلر زندہ تھوک","name_english":"Broiler Live Wholesale","unit":"kg","min_price":314,"max_price":314,"quality":"","category":"poultry","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":314},{"name_urdu":"برائلر زندہ پرچون","name_english":"Broiler Live Retail","unit":"kg","min_price":328,"max_price":328,"quality":"","category":"poultry","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":328},{"name_urdu":"برائلر گوشت پرچون","name_english":"Broiler Meat Retail","unit":"kg","min_price":475,"max_price":475,"quality":"","category":"poultry","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":475},{"name_urdu":"انڈہ فارمی تھوک","name_english":"Farm Egg Wholesale","unit":"peti","min_price":7050,"max_price":7050,"quality":"","category":"poultry","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":7050},{"name_urdu":"انڈہ فارمی فی درجن","name_english":"Farm Egg","unit":"dozen","min_price":239,"max_price":239,"quality":"","category":"poultry","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":239},{"name_urdu":"آٹا سرکاری","name_english":"Flour Govt Bag","unit":"20 kg","min_price":0,"max_price":0,"quality":"","category":"essential_commodities","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":0},{"name_urdu":"چاول باسمتی","name_english":"Basmati Rice Old","unit":"kg","min_price":300,"max_price":305,"quality":"","category":"essential_commodities","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":302.5},{"name_urdu":"دال چنا","name_english":"Split Chickpea","unit":"kg","min_price":220,"max_price":230,"quality":"","category":"essential_commodities","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":225}]};
 
 document.getElementById('api-link').href = BASE + '/docs';
 
@@ -474,7 +478,7 @@ let sortAsc     = true;
 // ── Fetch today ───────────────────────────────────────────────────────────────
 async function fetchData() {
   try {
-    const res = await fetch(`${BASE}/today`);
+    const res = await fetch(`${BASE}/today`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     allData = (json.data || []).map(d => ({
@@ -482,16 +486,20 @@ async function fetchData() {
       avg_price: d.avg_price || (d.min_price + d.max_price) / 2,
     }));
     document.getElementById('last-updated').textContent =
-      `Updated: ${json.date || 'today'} · refreshes every 30 min`;
+      `Updated: ${json.date || 'today'} · Live from API · refreshes every 30 min`;
     renderAll();
     fetchHistory();
   } catch (err) {
-    document.getElementById('table-container').innerHTML =
-      `<div class="state-wrap">
-        ⚠ Could not load data.<br>
-        <a href="${BASE}/today" style="color:var(--blue)" target="_blank">Check API →</a>
-      </div>`;
-    document.getElementById('stat-total').textContent = '—';
+    // API not available — use embedded fallback data
+    console.log('API unavailable, using fallback data:', err.message);
+    const json = FALLBACK_DATA;
+    allData = (json.data || []).map(d => ({
+      ...d,
+      avg_price: d.avg_price || (d.min_price + d.max_price) / 2,
+    }));
+    document.getElementById('last-updated').textContent =
+      `Updated: ${json.date} · Embedded data · Deploy Railway for live updates`;
+    renderAll();
   }
 }
 
