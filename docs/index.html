@@ -7,8 +7,10 @@
   <meta name="description" content="Live daily market rates for Lahore — vegetables, fruits, poultry & commodities. Updated every morning from Punjab Government official data.">
   <meta property="og:title" content="Price Pulse Lahore — Live Market Rates">
   <meta property="og:description" content="Live daily market rates for Lahore, Pakistan">
+  <meta property="og:url" content="https://shahnawazkakarh.github.io/price-pulse-lahore">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&family=Noto+Nastaliq+Urdu&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -28,278 +30,183 @@
       --amber-dim:#ffb34022;
       --blue:     #3b9eff;
       --blue-dim: #3b9eff15;
+      --purple:   #a78bfa;
       --accent:   #00d68f;
       --font-d:   'Syne', sans-serif;
       --font-m:   'JetBrains Mono', monospace;
       --font-u:   'Noto Nastaliq Urdu', serif;
     }
     html { scroll-behavior: smooth; }
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--font-d);
-      min-height: 100vh;
-      overflow-x: hidden;
-    }
+    body { background: var(--bg); color: var(--text); font-family: var(--font-d); min-height: 100vh; overflow-x: hidden; }
     body::before {
-      content: '';
-      position: fixed; inset: 0;
-      background-image:
-        linear-gradient(var(--border) 1px, transparent 1px),
-        linear-gradient(90deg, var(--border) 1px, transparent 1px);
-      background-size: 40px 40px;
-      opacity: .25;
-      pointer-events: none;
-      z-index: 0;
+      content: ''; position: fixed; inset: 0;
+      background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 40px 40px; opacity: .2; pointer-events: none; z-index: 0;
     }
 
     /* ── Ticker ── */
-    .ticker-wrap {
-      position: sticky; top: 0; z-index: 100;
-      background: var(--bg2);
-      border-bottom: 1px solid var(--border);
-      overflow: hidden; height: 44px;
-      display: flex; align-items: center;
-    }
-    .ticker-label {
-      flex-shrink: 0; padding: 0 16px;
-      font-family: var(--font-m); font-size: 10px; font-weight: 600;
-      letter-spacing: .12em; text-transform: uppercase; color: var(--accent);
-      border-right: 1px solid var(--border); height: 100%;
-      display: flex; align-items: center; gap: 6px;
-      background: var(--bg2); z-index: 2;
-    }
-    .ticker-label::before {
-      content: ''; width: 6px; height: 6px; border-radius: 50%;
-      background: var(--accent); animation: pulse 2s ease-in-out infinite;
-    }
+    .ticker-wrap { position: sticky; top: 0; z-index: 100; background: var(--bg2); border-bottom: 1px solid var(--border); overflow: hidden; height: 44px; display: flex; align-items: center; }
+    .ticker-label { flex-shrink: 0; padding: 0 16px; font-family: var(--font-m); font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); border-right: 1px solid var(--border); height: 100%; display: flex; align-items: center; gap: 6px; background: var(--bg2); z-index: 2; }
+    .ticker-label::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 2s ease-in-out infinite; }
     @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.8)} }
-    .ticker-track {
-      display: flex; animation: scroll-left 50s linear infinite;
-      white-space: nowrap;
-    }
+    .ticker-track { display: flex; animation: scroll-left 50s linear infinite; white-space: nowrap; }
     .ticker-track:hover { animation-play-state: paused; }
     @keyframes scroll-left { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
-    .ticker-item {
-      display: inline-flex; align-items: center; gap: 8px;
-      padding: 0 24px; font-family: var(--font-m); font-size: 12px;
-      border-right: 1px solid var(--border); height: 44px;
-    }
-    .ticker-name  { color: var(--text2); font-weight: 500; }
-    .ticker-price { color: var(--text);  font-weight: 600; }
+    .ticker-item { display: inline-flex; align-items: center; gap: 8px; padding: 0 24px; font-family: var(--font-m); font-size: 12px; border-right: 1px solid var(--border); height: 44px; }
+    .ticker-name { color: var(--text2); font-weight: 500; }
+    .ticker-price { color: var(--text); font-weight: 600; }
     .ticker-change { font-size: 11px; font-weight: 600; }
-    .ticker-change.up    { color: var(--green); }
-    .ticker-change.down  { color: var(--red); }
-    .ticker-change.stable{ color: var(--text3); }
+    .ticker-change.up { color: var(--green); } .ticker-change.down { color: var(--red); } .ticker-change.stable { color: var(--text3); }
+
+    /* ── Nav ── */
+    .nav { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 0 32px; display: flex; align-items: center; justify-content: space-between; height: 60px; }
+    .nav-brand { font-size: 18px; font-weight: 800; letter-spacing: -.01em; }
+    .nav-brand span { color: var(--accent); }
+    .nav-links { display: flex; gap: 4px; }
+    .nav-link { padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 500; color: var(--text2); cursor: pointer; border: none; background: transparent; transition: all .15s; }
+    .nav-link:hover, .nav-link.active { background: var(--bg3); color: var(--text); }
+    .lang-toggle { padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; color: var(--accent); cursor: pointer; border: 1px solid var(--border); background: transparent; font-family: var(--font-m); transition: all .15s; }
+    .lang-toggle:hover { background: var(--bg3); }
+
+    /* ── Pages ── */
+    .page { display: none; }
+    .page.active { display: block; }
 
     /* ── Header ── */
-    .header {
-      position: relative; z-index: 1;
-      padding: 48px 32px 32px;
-      display: flex; align-items: flex-end;
-      justify-content: space-between; flex-wrap: wrap; gap: 20px;
-      max-width: 1400px; margin: 0 auto;
-    }
-    .header h1 {
-      font-size: clamp(28px,5vw,52px); font-weight: 800;
-      letter-spacing: -.02em; line-height: 1;
-    }
+    .header { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 24px 32px 32px; display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 20px; }
+    .header h1 { font-size: clamp(24px,4vw,42px); font-weight: 800; letter-spacing: -.02em; line-height: 1; }
     .header h1 span { color: var(--accent); }
-    .header p { margin-top: 8px; font-size: 14px; color: var(--text2); font-family: var(--font-m); }
-    .header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+    .header p { margin-top: 6px; font-size: 13px; color: var(--text2); font-family: var(--font-m); }
+    .header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
     .last-updated { font-family: var(--font-m); font-size: 11px; color: var(--text3); }
-    .data-source  { font-family: var(--font-m); font-size: 11px; color: var(--text3); }
+    .data-source { font-family: var(--font-m); font-size: 11px; color: var(--text3); }
     .data-source a { color: var(--blue); text-decoration: none; }
 
+    /* ── Alert banner ── */
+    .alert-banner { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto 16px; padding: 0 32px; }
+    .alert-card { background: linear-gradient(135deg, #ff4d6a15, #ffb34015); border: 1px solid #ff4d6a33; border-radius: 10px; padding: 12px 20px; display: flex; align-items: center; gap: 12px; font-size: 13px; }
+    .alert-icon { font-size: 18px; flex-shrink: 0; }
+    .alert-text { color: var(--text); }
+    .alert-text strong { color: var(--red); }
+
     /* ── Stats ── */
-    .stats-row {
-      position: relative; z-index: 1;
-      max-width: 1400px; margin: 0 auto; padding: 0 32px 32px;
-      display: grid; grid-template-columns: repeat(4,1fr); gap: 12px;
-    }
-    .stat-card {
-      background: var(--bg2); border: 1px solid var(--border);
-      border-radius: 12px; padding: 20px; position: relative;
-      overflow: hidden; transition: border-color .2s;
-    }
+    .stats-row { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 0 32px 24px; display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
+    .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; position: relative; overflow: hidden; transition: border-color .2s; cursor: pointer; }
     .stat-card:hover { border-color: var(--border2); }
-    .stat-card::before {
-      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-    }
-    .stat-card.green::before { background: var(--green); }
-    .stat-card.red::before   { background: var(--red); }
-    .stat-card.amber::before { background: var(--amber); }
-    .stat-card.blue::before  { background: var(--blue); }
-    .stat-label { font-family: var(--font-m); font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text3); margin-bottom: 10px; }
-    .stat-value { font-size: 32px; font-weight: 800; line-height: 1; letter-spacing: -.02em; }
-    .stat-value.green { color: var(--green); }
-    .stat-value.red   { color: var(--red); }
-    .stat-value.amber { color: var(--amber); }
-    .stat-value.blue  { color: var(--blue); }
-    .stat-sub { margin-top: 6px; font-size: 12px; color: var(--text3); font-family: var(--font-m); }
+    .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+    .stat-card.green::before { background: var(--green); } .stat-card.red::before { background: var(--red); } .stat-card.amber::before { background: var(--amber); } .stat-card.blue::before { background: var(--blue); }
+    .stat-label { font-family: var(--font-m); font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text3); margin-bottom: 8px; }
+    .stat-value { font-size: 28px; font-weight: 800; line-height: 1; letter-spacing: -.02em; }
+    .stat-value.green { color: var(--green); } .stat-value.red { color: var(--red); } .stat-value.amber { color: var(--amber); } .stat-value.blue { color: var(--blue); }
+    .stat-sub { margin-top: 4px; font-size: 11px; color: var(--text3); font-family: var(--font-m); }
 
-    /* ── Controls bar ── */
-    .controls {
-      position: relative; z-index: 1;
-      max-width: 1400px; margin: 0 auto; padding: 0 32px 20px;
-      display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
-    }
+    /* ── Category summary cards ── */
+    .cat-summary { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 0 32px 24px; display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
+    .cat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; cursor: pointer; transition: border-color .2s; }
+    .cat-card:hover { border-color: var(--border2); }
+    .cat-card.active-cat { border-color: var(--accent); }
+    .cat-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .cat-emoji { font-size: 20px; }
+    .cat-badge-sm { font-family: var(--font-m); font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: .06em; }
+    .cat-name { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+    .cat-stats { display: flex; gap: 12px; }
+    .cat-stat { font-family: var(--font-m); font-size: 11px; }
+    .cat-stat .val { font-weight: 600; }
+    .cat-stat .lbl { color: var(--text3); }
 
-    /* category tabs */
-    .tab {
-      padding: 8px 18px; border: 1px solid var(--border); border-radius: 100px;
-      background: transparent; color: var(--text2); font-family: var(--font-d);
-      font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s;
-    }
+    /* ── Controls ── */
+    .controls { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 0 32px 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .tab { padding: 7px 16px; border: 1px solid var(--border); border-radius: 100px; background: transparent; color: var(--text2); font-family: var(--font-d); font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
     .tab:hover { border-color: var(--border2); color: var(--text); }
     .tab.active { background: var(--accent); border-color: var(--accent); color: #000; }
-
-    /* search */
-    .search-input {
-      background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
-      padding: 8px 14px; color: var(--text); font-family: var(--font-m);
-      font-size: 13px; outline: none; transition: border-color .15s; width: 200px;
-    }
+    .search-input { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 7px 14px; color: var(--text); font-family: var(--font-m); font-size: 13px; outline: none; transition: border-color .15s; width: 200px; }
     .search-input::placeholder { color: var(--text3); }
     .search-input:focus { border-color: var(--accent); }
-
-    /* selects */
-    .ctrl-select {
-      background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
-      padding: 8px 12px; color: var(--text2); font-family: var(--font-m);
-      font-size: 12px; outline: none; cursor: pointer; transition: border-color .15s;
-      appearance: none; padding-right: 28px;
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23445566' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-      background-repeat: no-repeat; background-position: right 8px center;
-    }
+    .ctrl-select { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 7px 28px 7px 12px; color: var(--text2); font-family: var(--font-m); font-size: 12px; outline: none; cursor: pointer; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23445566' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; transition: border-color .15s; }
     .ctrl-select:focus { border-color: var(--accent); }
     .ctrl-select option { background: var(--bg2); }
-
-    /* direction filter pills */
-    .dir-pill {
-      padding: 7px 14px; border: 1px solid var(--border); border-radius: 100px;
-      background: transparent; font-family: var(--font-m); font-size: 11px;
-      font-weight: 600; cursor: pointer; transition: all .15s; letter-spacing: .04em;
-    }
-    .dir-pill.up    { color: var(--green); }
-    .dir-pill.down  { color: var(--red); }
-    .dir-pill.stable{ color: var(--amber); }
-    .dir-pill.active.up    { background: var(--green-dim); border-color: var(--green); }
-    .dir-pill.active.down  { background: var(--red-dim);   border-color: var(--red); }
-    .dir-pill.active.stable{ background: var(--amber-dim); border-color: var(--amber); }
-
+    .dir-pill { padding: 6px 12px; border: 1px solid var(--border); border-radius: 100px; background: transparent; font-family: var(--font-m); font-size: 11px; font-weight: 600; cursor: pointer; transition: all .15s; }
+    .dir-pill.up { color: var(--green); } .dir-pill.down { color: var(--red); } .dir-pill.stable { color: var(--amber); }
+    .dir-pill.active.up { background: var(--green-dim); border-color: var(--green); } .dir-pill.active.down { background: var(--red-dim); border-color: var(--red); } .dir-pill.active.stable { background: var(--amber-dim); border-color: var(--amber); }
     .ctrl-divider { width: 1px; height: 24px; background: var(--border); flex-shrink: 0; }
+    .result-count { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 0 32px 10px; font-family: var(--font-m); font-size: 11px; color: var(--text3); }
 
     /* ── Table ── */
-    .table-wrap {
-      position: relative; z-index: 1;
-      max-width: 1400px; margin: 0 auto; padding: 0 32px 32px;
-    }
+    .table-wrap { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 0 32px 32px; }
     .price-table { width: 100%; border-collapse: collapse; background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
     .price-table thead tr { border-bottom: 1px solid var(--border); }
-    .price-table th {
-      padding: 14px 20px; text-align: left; font-family: var(--font-m);
-      font-size: 10px; font-weight: 600; letter-spacing: .1em;
-      text-transform: uppercase; color: var(--text3); cursor: pointer;
-      user-select: none; transition: color .15s; white-space: nowrap;
-    }
-    .price-table th:hover { color: var(--text2); }
-    .price-table th.sorted { color: var(--accent); }
-    .price-table th:last-child { text-align: right; }
-    .price-table tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+    .price-table th { padding: 12px 20px; text-align: left; font-family: var(--font-m); font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text3); cursor: pointer; user-select: none; transition: color .15s; }
+    .price-table th:hover { color: var(--text2); } .price-table th.sorted { color: var(--accent); }
+    .price-table tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; cursor: pointer; }
     .price-table tbody tr:last-child { border-bottom: none; }
     .price-table tbody tr:hover { background: var(--bg3); }
-    .price-table td { padding: 14px 20px; font-size: 13px; vertical-align: middle; }
+    .price-table td { padding: 12px 20px; font-size: 13px; vertical-align: middle; }
     .item-name-en { font-weight: 600; color: var(--text); font-size: 14px; }
     .item-name-ur { font-family: var(--font-u); font-size: 13px; color: var(--text2); display: block; margin-top: 2px; direction: rtl; }
-    .cat-badge {
-      display: inline-block; padding: 2px 8px; border-radius: 4px;
-      font-family: var(--font-m); font-size: 10px; font-weight: 600;
-      letter-spacing: .05em; text-transform: uppercase;
-    }
-    .cat-badge.vegetables          { background: #00d68f15; color: var(--green); }
-    .cat-badge.fruits              { background: #ffb34018; color: var(--amber); }
-    .cat-badge.poultry             { background: #3b9eff15; color: var(--blue); }
-    .cat-badge.essential_commodities{ background: #ff4d6a15; color: var(--red); }
-    .price-cell { font-family: var(--font-m); font-size: 13px; color: var(--text); }
+    .cat-badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-family: var(--font-m); font-size: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+    .cat-badge.vegetables { background: #00d68f15; color: var(--green); } .cat-badge.fruits { background: #ffb34018; color: var(--amber); } .cat-badge.poultry { background: #3b9eff15; color: var(--blue); } .cat-badge.essential_commodities { background: #a78bfa15; color: var(--purple); }
+    .price-cell { font-family: var(--font-m); font-size: 13px; color: var(--text); font-weight: 600; }
     .price-range { font-size: 11px; color: var(--text3); margin-top: 2px; }
-    .change-cell { text-align: right; }
-    .change-pill {
-      display: inline-flex; align-items: center; gap: 4px;
-      padding: 4px 10px; border-radius: 100px;
-      font-family: var(--font-m); font-size: 12px; font-weight: 600;
-    }
-    .change-pill.up     { background: var(--green-dim); color: var(--green); }
-    .change-pill.down   { background: var(--red-dim);   color: var(--red); }
-    .change-pill.stable { background: var(--border);     color: var(--text3); }
+    .change-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 100px; font-family: var(--font-m); font-size: 12px; font-weight: 600; }
+    .change-pill.up { background: var(--green-dim); color: var(--green); } .change-pill.down { background: var(--red-dim); color: var(--red); } .change-pill.stable { background: var(--border); color: var(--text3); }
 
-    /* sort indicator */
-    .sort-icon { font-size: 9px; margin-left: 4px; opacity: .5; }
-    .sorted .sort-icon { opacity: 1; }
+    /* sparkline canvas */
+    .sparkline { width: 80px; height: 32px; }
 
-    /* result count */
-    .result-count {
-      font-family: var(--font-m); font-size: 11px; color: var(--text3);
-      padding: 0 32px 12px; max-width: 1400px; margin: 0 auto;
-      position: relative; z-index: 1;
-    }
-
-    /* ── Historical section ── */
-    .section-title {
-      position: relative; z-index: 1;
-      max-width: 1400px; margin: 0 auto; padding: 8px 32px 16px;
-      font-size: 13px; font-weight: 700; letter-spacing: .08em;
-      text-transform: uppercase; color: var(--text3);
-      display: flex; align-items: center; gap: 10px;
-    }
-    .section-title::after {
-      content: ''; flex: 1; height: 1px; background: var(--border);
-    }
+    /* ── Section title ── */
+    .section-title { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 8px 32px 16px; font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text3); display: flex; align-items: center; gap: 10px; }
+    .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
     /* ── Movers ── */
-    .movers-section {
-      position: relative; z-index: 1;
-      max-width: 1400px; margin: 0 auto; padding: 0 32px 48px;
-      display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
-    }
+    .movers-section { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 0 32px 32px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     .movers-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-    .movers-header { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+    .movers-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
     .movers-header h3 { font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-    .movers-header h3.green { color: var(--green); }
-    .movers-header h3.red   { color: var(--red); }
-    .mover-row {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 12px 20px; border-bottom: 1px solid var(--border); transition: background .1s;
-    }
+    .movers-header h3.green { color: var(--green); } .movers-header h3.red { color: var(--red); }
+    .mover-row { display: flex; align-items: center; justify-content: space-between; padding: 11px 20px; border-bottom: 1px solid var(--border); transition: background .1s; cursor: pointer; }
     .mover-row:last-child { border-bottom: none; }
     .mover-row:hover { background: var(--bg3); }
-    .mover-name  { font-size: 13px; font-weight: 600; color: var(--text); }
-    .mover-meta  { font-family: var(--font-m); font-size: 11px; color: var(--text3); margin-top: 2px; }
+    .mover-name { font-size: 13px; font-weight: 600; color: var(--text); }
+    .mover-meta { font-family: var(--font-m); font-size: 11px; color: var(--text3); margin-top: 2px; }
 
-    /* ── Historical data section ── */
-    .history-section {
-      position: relative; z-index: 1;
-      max-width: 1400px; margin: 0 auto; padding: 0 32px 48px;
-    }
-    .history-grid {
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;
-    }
-    .history-card {
-      background: var(--bg2); border: 1px solid var(--border); border-radius: 12px;
-      padding: 16px 20px;
-    }
-    .history-date { font-family: var(--font-m); font-size: 11px; color: var(--text3); margin-bottom: 8px; }
-    .history-stats { display: flex; gap: 16px; }
-    .history-stat { text-align: center; }
-    .history-stat .val { font-size: 20px; font-weight: 800; }
-    .history-stat .lbl { font-family: var(--font-m); font-size: 10px; color: var(--text3); margin-top: 2px; }
+    /* ── Basket calculator ── */
+    .basket-section { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 0 32px 32px; }
+    .basket-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
+    .basket-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .basket-header h3 { font-size: 16px; font-weight: 700; }
+    .basket-total { font-family: var(--font-m); font-size: 24px; font-weight: 800; color: var(--accent); }
+    .basket-total-label { font-family: var(--font-m); font-size: 11px; color: var(--text3); text-align: right; }
+    .basket-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+    .basket-item { display: flex; align-items: center; gap: 10px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+    .basket-item input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; }
+    .basket-item-name { font-size: 13px; font-weight: 500; color: var(--text); flex: 1; }
+    .basket-item-price { font-family: var(--font-m); font-size: 12px; color: var(--text2); }
+    .basket-summary { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; gap: 20px; flex-wrap: wrap; }
+    .basket-stat { font-family: var(--font-m); font-size: 12px; }
+    .basket-stat .val { font-size: 16px; font-weight: 700; display: block; }
+
+    /* ── Item detail modal ── */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(4px); }
+    .modal-overlay.hidden { display: none; }
+    .modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 16px; width: 100%; max-width: 560px; overflow: hidden; }
+    .modal-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; justify-content: space-between; }
+    .modal-title { font-size: 20px; font-weight: 800; }
+    .modal-subtitle { font-family: var(--font-u); font-size: 16px; color: var(--text2); direction: rtl; margin-top: 2px; }
+    .modal-close { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; color: var(--text2); cursor: pointer; font-size: 14px; }
+    .modal-body { padding: 24px; }
+    .modal-price-row { display: flex; gap: 16px; margin-bottom: 20px; }
+    .modal-price-box { flex: 1; background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 14px; text-align: center; }
+    .modal-price-box .val { font-family: var(--font-m); font-size: 22px; font-weight: 800; color: var(--text); }
+    .modal-price-box .lbl { font-family: var(--font-m); font-size: 10px; color: var(--text3); text-transform: uppercase; margin-top: 2px; }
+    .modal-chart-wrap { background: var(--bg3); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+    .modal-chart-title { font-family: var(--font-m); font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; }
+    .modal-meta { display: flex; gap: 16px; flex-wrap: wrap; }
+    .modal-meta-item { font-family: var(--font-m); font-size: 12px; }
+    .modal-meta-item .lbl { color: var(--text3); }
+    .modal-meta-item .val { color: var(--text); font-weight: 600; }
 
     /* ── Footer ── */
-    .footer {
-      position: relative; z-index: 1; border-top: 1px solid var(--border);
-      padding: 24px 32px; max-width: 1400px; margin: 0 auto;
-      display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;
-    }
+    .footer { position: relative; z-index: 1; border-top: 1px solid var(--border); padding: 20px 32px; max-width: 1400px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
     .footer-brand { font-size: 13px; font-weight: 700; color: var(--text2); }
     .footer-brand a { color: var(--accent); text-decoration: none; }
     .footer-links { display: flex; gap: 20px; }
@@ -307,29 +214,26 @@
     .footer-links a:hover { color: var(--text2); }
 
     /* ── States ── */
-    .state-wrap {
-      display: flex; flex-direction: column; align-items: center;
-      justify-content: center; padding: 80px 32px; gap: 16px;
-      color: var(--text3); font-family: var(--font-m); font-size: 13px;
-    }
-    .spinner {
-      width: 24px; height: 24px; border: 2px solid var(--border);
-      border-top-color: var(--accent); border-radius: 50%;
-      animation: spin .7s linear infinite;
-    }
+    .state-wrap { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 32px; gap: 12px; color: var(--text3); font-family: var(--font-m); font-size: 13px; }
+    .spinner { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Urdu mode ── */
+    body.urdu-mode .item-name-en { display: none; }
+    body.urdu-mode .item-name-ur { font-size: 15px; color: var(--text); }
+    body.urdu-mode { direction: rtl; }
+    body.urdu-mode .ticker-track { animation-direction: reverse; }
 
     /* ── Responsive ── */
     @media (max-width: 900px) {
-      .stats-row { grid-template-columns: 1fr 1fr; }
+      .stats-row, .cat-summary { grid-template-columns: 1fr 1fr; }
       .movers-section { grid-template-columns: 1fr; }
-      .header,.stats-row,.controls,.result-count,.table-wrap,.movers-section,.history-section,.section-title,.footer {
-        padding-left: 16px; padding-right: 16px;
-      }
+      .header, .stats-row, .cat-summary, .controls, .result-count, .table-wrap, .movers-section, .basket-section, .section-title, .footer, .alert-banner, .nav { padding-left: 16px; padding-right: 16px; }
     }
     @media (max-width: 600px) {
-      .price-table th:nth-child(2), .price-table td:nth-child(2) { display: none; }
-      .search-input { width: 140px; }
+      .price-table th:nth-child(2), .price-table td:nth-child(2), .price-table th:nth-child(5), .price-table td:nth-child(5) { display: none; }
+      .cat-summary { grid-template-columns: 1fr 1fr; }
+      .search-input { width: 130px; }
     }
   </style>
 </head>
@@ -338,110 +242,166 @@
 <!-- Ticker -->
 <div class="ticker-wrap">
   <div class="ticker-label">LIVE</div>
-  <div style="overflow:hidden;flex:1">
-    <div class="ticker-track" id="ticker"></div>
-  </div>
+  <div style="overflow:hidden;flex:1"><div class="ticker-track" id="ticker"></div></div>
 </div>
 
-<!-- Header -->
-<header class="header">
-  <div>
-    <h1>Price <span>Pulse</span> Lahore</h1>
-    <p>روزانہ منڈی کی قیمتیں — Daily market rates, Lahore</p>
+<!-- Nav -->
+<nav class="nav">
+  <div class="nav-brand">Price <span>Pulse</span> Lahore</div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <div class="nav-links">
+      <button class="nav-link active" onclick="showPage('prices')">Prices</button>
+      <button class="nav-link" onclick="showPage('basket')">🛒 Basket</button>
+    </div>
+    <button class="lang-toggle" id="lang-toggle" onclick="toggleLang()">اردو</button>
   </div>
-  <div class="header-right">
-    <div class="last-updated" id="last-updated">Loading...</div>
-    <div class="data-source">
-      Source: <a href="https://lahore.punjab.gov.pk/market_rates" target="_blank">Punjab Govt</a>
-      &nbsp;·&nbsp; <a href="https://github.com/ShahnawazKakarh/price-pulse-lahore" target="_blank">GitHub</a>
-      &nbsp;·&nbsp; <a href="#" id="api-link" target="_blank">API</a>
+</nav>
+
+<!-- PRICES PAGE -->
+<div class="page active" id="page-prices">
+
+  <!-- Header -->
+  <header class="header">
+    <div>
+      <h1>Today's <span>Market Rates</span></h1>
+      <p id="header-urdu">روزانہ منڈی کی قیمتیں — Lahore, Pakistan</p>
+    </div>
+    <div class="header-right">
+      <div class="last-updated" id="last-updated">Loading...</div>
+      <div class="data-source">
+        Source: <a href="https://lahore.punjab.gov.pk/market_rates" target="_blank">Punjab Govt</a> ·
+        <a href="https://price-pulse-lahore.vercel.app/docs" target="_blank">API</a> ·
+        <a href="https://github.com/ShahnawazKakarh/price-pulse-lahore" target="_blank">GitHub</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Alert banner (biggest mover) -->
+  <div class="alert-banner" id="alert-banner" style="display:none">
+    <div class="alert-card">
+      <span class="alert-icon">🔥</span>
+      <span class="alert-text" id="alert-text"></span>
     </div>
   </div>
-</header>
 
-<!-- Stats -->
-<div class="stats-row">
-  <div class="stat-card blue">
-    <div class="stat-label">Total Items</div>
-    <div class="stat-value blue" id="stat-total">—</div>
-    <div class="stat-sub">tracked today</div>
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat-card blue" onclick="filterDir('')">
+      <div class="stat-label">Total Items</div>
+      <div class="stat-value blue" id="stat-total">—</div>
+      <div class="stat-sub">tracked today</div>
+    </div>
+    <div class="stat-card green" onclick="filterDir('up')">
+      <div class="stat-label">Rising ↑</div>
+      <div class="stat-value green" id="stat-rising">—</div>
+      <div class="stat-sub">prices up today</div>
+    </div>
+    <div class="stat-card red" onclick="filterDir('down')">
+      <div class="stat-label">Falling ↓</div>
+      <div class="stat-value red" id="stat-falling">—</div>
+      <div class="stat-sub">prices down today</div>
+    </div>
+    <div class="stat-card amber" onclick="filterDir('stable')">
+      <div class="stat-label">Stable →</div>
+      <div class="stat-value amber" id="stat-stable">—</div>
+      <div class="stat-sub">no change</div>
+    </div>
   </div>
-  <div class="stat-card green">
-    <div class="stat-label">Rising ↑</div>
-    <div class="stat-value green" id="stat-rising">—</div>
-    <div class="stat-sub">prices up today</div>
+
+  <!-- Category summary cards -->
+  <div class="cat-summary" id="cat-summary"></div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button class="tab active" data-cat="all">All</button>
+    <button class="tab" data-cat="vegetables">🥦 Vegetables</button>
+    <button class="tab" data-cat="fruits">🍋 Fruits</button>
+    <button class="tab" data-cat="poultry">🍗 Poultry</button>
+    <button class="tab" data-cat="essential_commodities">🌾 Commodities</button>
+    <div class="ctrl-divider"></div>
+    <button class="dir-pill up" data-dir="up">▲ Rising</button>
+    <button class="dir-pill down" data-dir="down">▼ Falling</button>
+    <button class="dir-pill stable" data-dir="stable">→ Stable</button>
+    <div class="ctrl-divider"></div>
+    <select class="ctrl-select" id="sort-select">
+      <option value="name-asc">A → Z</option>
+      <option value="name-desc">Z → A</option>
+      <option value="price-asc">Price ↑</option>
+      <option value="price-desc">Price ↓</option>
+      <option value="change-desc">Biggest Gainer</option>
+      <option value="change-asc">Biggest Loser</option>
+    </select>
+    <input class="search-input" id="search" type="text" placeholder="Search (tomato, آلو...)">
   </div>
-  <div class="stat-card red">
-    <div class="stat-label">Falling ↓</div>
-    <div class="stat-value red" id="stat-falling">—</div>
-    <div class="stat-sub">prices down today</div>
+  <div class="result-count" id="result-count"></div>
+
+  <!-- Table -->
+  <div class="table-wrap">
+    <div id="table-container">
+      <div class="state-wrap"><div class="spinner"></div><span>Loading prices...</span></div>
+    </div>
   </div>
-  <div class="stat-card amber">
-    <div class="stat-label">Stable →</div>
-    <div class="stat-value amber" id="stat-stable">—</div>
-    <div class="stat-sub">no change today</div>
+
+  <!-- Top Movers -->
+  <div class="section-title">Top Movers Today</div>
+  <div class="movers-section">
+    <div class="movers-card">
+      <div class="movers-header"><h3 class="green">▲ Top Gainers</h3></div>
+      <div id="gainers-list"></div>
+    </div>
+    <div class="movers-card">
+      <div class="movers-header"><h3 class="red">▼ Top Losers</h3></div>
+      <div id="losers-list"></div>
+    </div>
+  </div>
+
+</div><!-- end prices page -->
+
+<!-- BASKET PAGE -->
+<div class="page" id="page-basket">
+  <div class="header">
+    <div>
+      <h1>🛒 <span>Basket</span> Calculator</h1>
+      <p>Select items to calculate your weekly grocery cost</p>
+    </div>
+    <div class="header-right">
+      <div class="basket-total" id="basket-total">Rs 0</div>
+      <div class="basket-total-label">Selected items total</div>
+    </div>
+  </div>
+  <div class="basket-section">
+    <div class="basket-card">
+      <div class="basket-header">
+        <h3>Select your items</h3>
+        <button onclick="clearBasket()" style="font-family:var(--font-m);font-size:12px;padding:6px 12px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer">Clear all</button>
+      </div>
+      <div class="basket-grid" id="basket-grid">
+        <div class="state-wrap"><div class="spinner"></div><span>Loading items...</span></div>
+      </div>
+      <div class="basket-summary" id="basket-summary"></div>
+    </div>
   </div>
 </div>
 
-<!-- Controls -->
-<div class="controls">
-  <!-- Category tabs -->
-  <button class="tab active" data-cat="all">All</button>
-  <button class="tab" data-cat="vegetables">Vegetables</button>
-  <button class="tab" data-cat="fruits">Fruits</button>
-  <button class="tab" data-cat="poultry">Poultry</button>
-  <button class="tab" data-cat="essential_commodities">Commodities</button>
-
-  <div class="ctrl-divider"></div>
-
-  <!-- Direction filter -->
-  <button class="dir-pill up"    data-dir="up">▲ Rising</button>
-  <button class="dir-pill down"  data-dir="down">▼ Falling</button>
-  <button class="dir-pill stable" data-dir="stable">→ Stable</button>
-
-  <div class="ctrl-divider"></div>
-
-  <!-- Sort -->
-  <select class="ctrl-select" id="sort-select">
-    <option value="name-asc">Sort: A → Z</option>
-    <option value="name-desc">Sort: Z → A</option>
-    <option value="price-asc">Price: Low → High</option>
-    <option value="price-desc">Price: High → Low</option>
-    <option value="change-desc">Change: Biggest ↑</option>
-    <option value="change-asc">Change: Biggest ↓</option>
-  </select>
-
-  <!-- Search -->
-  <input class="search-input" id="search" type="text" placeholder="Search (tomato, آلو...)">
-</div>
-
-<!-- Result count -->
-<div class="result-count" id="result-count"></div>
-
-<!-- Table -->
-<div class="table-wrap">
-  <div id="table-container">
-    <div class="state-wrap"><div class="spinner"></div><span>Loading prices...</span></div>
+<!-- Item Detail Modal -->
+<div class="modal-overlay hidden" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modal-title"></div>
+        <div class="modal-subtitle" id="modal-subtitle"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-price-row" id="modal-prices"></div>
+      <div class="modal-chart-wrap">
+        <div class="modal-chart-title">Price Trend (recent data)</div>
+        <canvas id="modal-chart" height="120"></canvas>
+      </div>
+      <div class="modal-meta" id="modal-meta"></div>
+    </div>
   </div>
-</div>
-
-<!-- Top Movers -->
-<div class="section-title">Top Movers Today</div>
-<div class="movers-section" id="movers-section">
-  <div class="movers-card">
-    <div class="movers-header"><h3 class="green">▲ Top Gainers</h3></div>
-    <div id="gainers-list"><div class="state-wrap" style="padding:20px">Loading...</div></div>
-  </div>
-  <div class="movers-card">
-    <div class="movers-header"><h3 class="red">▼ Top Losers</h3></div>
-    <div id="losers-list"><div class="state-wrap" style="padding:20px">Loading...</div></div>
-  </div>
-</div>
-
-<!-- Historical -->
-<div class="section-title" id="history-title" style="display:none">Historical Data</div>
-<div class="history-section" id="history-section" style="display:none">
-  <div class="history-grid" id="history-grid"></div>
 </div>
 
 <!-- Footer -->
@@ -449,6 +409,7 @@
   <div class="footer-brand">Built by <a href="https://skakarh.com" target="_blank">QA Pulse by SK</a></div>
   <div class="footer-links">
     <a href="https://github.com/ShahnawazKakarh/price-pulse-lahore" target="_blank">GitHub</a>
+    <a href="https://price-pulse-lahore.vercel.app/docs" target="_blank">API Docs</a>
     <a href="https://lahore.punjab.gov.pk/market_rates" target="_blank">Data Source</a>
     <a href="https://skakarh.com" target="_blank">skakarh.com</a>
   </div>
@@ -461,93 +422,122 @@ const RAILWAY_URL = 'https://price-pulse-lahore.vercel.app';
 const LOCAL_URL   = 'http://localhost:8000';
 const BASE        = IS_GITHUB ? RAILWAY_URL : LOCAL_URL;
 
-// Embedded fallback data — real OCR data, updated on each commit
-// This ensures GitHub Pages always shows data even before Railway is live
-const FALLBACK_DATA = {"date":"2026-05-30","count":23,"data":[{"name_urdu":"شملہ مرچ","name_english":"Capsicum","unit":"kg","min_price":90,"max_price":90,"quality":"A","category":"vegetables","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":90},{"name_urdu":"شملہ مرچ","name_english":"Capsicum B","unit":"kg","min_price":85,"max_price":85,"quality":"B","category":"vegetables","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":85},{"name_urdu":"شلجم","name_english":"Turnip","unit":"kg","min_price":60,"max_price":60,"quality":"A","category":"vegetables","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":60},{"name_urdu":"شلجم","name_english":"Turnip B","unit":"kg","min_price":57,"max_price":57,"quality":"B","category":"vegetables","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":57},{"name_urdu":"آم کچا","name_english":"Raw Mango","unit":"kg","min_price":40,"max_price":40,"quality":"A","category":"fruits","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":40},{"name_urdu":"آم کچا","name_english":"Raw Mango B","unit":"kg","min_price":38,"max_price":38,"quality":"B","category":"fruits","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":38},{"name_urdu":"آم سہارنی","name_english":"Saharni Mango","unit":"kg","min_price":165,"max_price":165,"quality":"A","category":"fruits","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":165},{"name_urdu":"آم سہارنی","name_english":"Saharni Mango B","unit":"kg","min_price":157,"max_price":157,"quality":"B","category":"fruits","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":157},{"name_urdu":"آم سندھڑی اول","name_english":"Sindhri Mango A","unit":"kg","min_price":285,"max_price":285,"quality":"A","category":"fruits","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":285},{"name_urdu":"آم سندھڑی دوئم","name_english":"Sindhri Mango B","unit":"kg","min_price":230,"max_price":230,"quality":"B","category":"fruits","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":230},{"name_urdu":"آم دوسری","name_english":"Doosri Mango","unit":"kg","min_price":270,"max_price":270,"quality":"A","category":"fruits","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":270},{"name_urdu":"فارم گیٹ ریٹ زندہ","name_english":"Farm Gate Live","unit":"kg","min_price":300,"max_price":300,"quality":"","category":"poultry","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":300},{"name_urdu":"برائلر زندہ تھوک","name_english":"Broiler Live Wholesale","unit":"kg","min_price":314,"max_price":314,"quality":"","category":"poultry","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":314},{"name_urdu":"برائلر زندہ پرچون","name_english":"Broiler Live Retail","unit":"kg","min_price":328,"max_price":328,"quality":"","category":"poultry","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":328},{"name_urdu":"برائلر گوشت پرچون","name_english":"Broiler Meat Retail","unit":"kg","min_price":475,"max_price":475,"quality":"","category":"poultry","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":475},{"name_urdu":"انڈہ فارمی تھوک","name_english":"Farm Egg Wholesale","unit":"peti","min_price":7050,"max_price":7050,"quality":"","category":"poultry","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":7050},{"name_urdu":"انڈہ فارمی فی درجن","name_english":"Farm Egg","unit":"dozen","min_price":239,"max_price":239,"quality":"","category":"poultry","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":239},{"name_urdu":"آٹا سرکاری","name_english":"Flour Govt Bag","unit":"20 kg","min_price":0,"max_price":0,"quality":"","category":"essential_commodities","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":0},{"name_urdu":"چاول باسمتی","name_english":"Basmati Rice Old","unit":"kg","min_price":300,"max_price":305,"quality":"","category":"essential_commodities","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":302.5},{"name_urdu":"دال چنا","name_english":"Split Chickpea","unit":"kg","min_price":220,"max_price":230,"quality":"","category":"essential_commodities","date":"2026-05-30","direction":"stable","price_change_pct":null,"avg_price":225}]};
-
-document.getElementById('api-link').href = BASE + '/docs';
-
 // ── State ─────────────────────────────────────────────────────────────────────
-let allData     = [];
-let activeTab   = 'all';
-let activeDirs  = new Set();   // empty = show all directions
-let sortKey     = 'name-asc';
-let searchQ     = '';
-let sortAsc     = true;
+let allData    = [];
+let activeTab  = 'all';
+let activeDirs = new Set();
+let sortKey    = 'name-asc';
+let searchQ    = '';
+let isUrdu     = false;
+let modalChart = null;
 
-// ── Fetch today ───────────────────────────────────────────────────────────────
+const CAT_META = {
+  vegetables:           { emoji: '🥦', label: 'Vegetables',   color: 'var(--green)' },
+  fruits:               { emoji: '🍋', label: 'Fruits',        color: 'var(--amber)' },
+  poultry:              { emoji: '🍗', label: 'Poultry',       color: 'var(--blue)' },
+  essential_commodities:{ emoji: '🌾', label: 'Commodities',   color: 'var(--purple)' },
+};
+
+// ── Fetch ─────────────────────────────────────────────────────────────────────
 async function fetchData() {
   try {
-    const res = await fetch(`${BASE}/today`, { signal: AbortSignal.timeout(5000) });
+    const res = await fetch(`${BASE}/today`, { signal: AbortSignal.timeout(6000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     allData = (json.data || []).map(d => ({
-      ...d,
-      avg_price: d.avg_price || (d.min_price + d.max_price) / 2,
+      ...d, avg_price: d.avg_price || (d.min_price + d.max_price) / 2,
     }));
     document.getElementById('last-updated').textContent =
-      `Updated: ${json.date || 'today'} · Live from API · refreshes every 30 min`;
+      `Updated: ${json.date || 'today'} · Live from API · auto-refreshes every 30 min`;
     renderAll();
-    fetchHistory();
   } catch (err) {
-    // API not available — use embedded fallback data
-    console.log('API unavailable, using fallback data:', err.message);
-    const json = FALLBACK_DATA;
-    allData = (json.data || []).map(d => ({
-      ...d,
-      avg_price: d.avg_price || (d.min_price + d.max_price) / 2,
+    // Embedded fallback
+    allData = FALLBACK_DATA.data.map(d => ({
+      ...d, avg_price: d.avg_price || (d.min_price + d.max_price) / 2,
     }));
     document.getElementById('last-updated').textContent =
-      `Updated: ${json.date} · Embedded data · Deploy Railway for live updates`;
+      `Updated: ${FALLBACK_DATA.date} · Embedded data`;
     renderAll();
   }
 }
 
-// ── Fetch history (multiple JSON files) ───────────────────────────────────────
-async function fetchHistory() {
-  // Try to get last 5 days from API /today for each date
-  // For now pull from movers endpoint which has summary
-  try {
-    const res = await fetch(`${BASE}/movers?limit=5`);
-    if (!res.ok) return;
-    // History section will show when DB is live
-    // For now show today's summary only
-  } catch {}
-}
-
-// ── Render everything ─────────────────────────────────────────────────────────
 function renderAll() {
   renderStats();
   renderTicker();
+  renderCatSummary();
   renderTable();
   renderMovers();
+  renderBasket();
+  renderAlert();
+}
+
+// ── Alert Banner ──────────────────────────────────────────────────────────────
+function renderAlert() {
+  const withChange = allData.filter(d => d.price_change_pct != null);
+  if (!withChange.length) return;
+  const biggest = withChange.reduce((a,b) => Math.abs(b.price_change_pct) > Math.abs(a.price_change_pct) ? b : a);
+  if (Math.abs(biggest.price_change_pct) < 5) return;
+  const dir = biggest.direction === 'up' ? '📈 up' : '📉 down';
+  const sign = biggest.price_change_pct > 0 ? '+' : '';
+  document.getElementById('alert-text').innerHTML =
+    `<strong>${biggest.name_english}</strong> is ${dir} <strong>${sign}${biggest.price_change_pct.toFixed(1)}%</strong> today — Rs ${Math.round(biggest.avg_price)}/${biggest.unit}`;
+  document.getElementById('alert-banner').style.display = 'block';
 }
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 function renderStats() {
-  const rising  = allData.filter(d => d.direction === 'up').length;
-  const falling = allData.filter(d => d.direction === 'down').length;
-  const stable  = allData.filter(d => d.direction === 'stable').length;
   document.getElementById('stat-total').textContent   = allData.length;
-  document.getElementById('stat-rising').textContent  = rising;
-  document.getElementById('stat-falling').textContent = falling;
-  document.getElementById('stat-stable').textContent  = stable;
+  document.getElementById('stat-rising').textContent  = allData.filter(d => d.direction === 'up').length;
+  document.getElementById('stat-falling').textContent = allData.filter(d => d.direction === 'down').length;
+  document.getElementById('stat-stable').textContent  = allData.filter(d => d.direction === 'stable').length;
+}
+
+// ── Category Summary Cards ────────────────────────────────────────────────────
+function renderCatSummary() {
+  const cats = ['vegetables','fruits','poultry','essential_commodities'];
+  const html = cats.map(cat => {
+    const items = allData.filter(d => d.category === cat);
+    if (!items.length) return '';
+    const m = CAT_META[cat];
+    const rising  = items.filter(d => d.direction === 'up').length;
+    const falling = items.filter(d => d.direction === 'down').length;
+    const avgP = Math.round(items.reduce((s,d) => s + d.avg_price, 0) / items.length);
+    const isActive = activeTab === cat;
+    return `<div class="cat-card ${isActive ? 'active-cat' : ''}" onclick="setCat('${cat}')">
+      <div class="cat-card-top">
+        <span class="cat-emoji">${m.emoji}</span>
+        <span class="cat-badge-sm" style="background:${m.color}22;color:${m.color}">${items.length} items</span>
+      </div>
+      <div class="cat-name">${m.label}</div>
+      <div class="cat-stats">
+        <div class="cat-stat"><span class="val" style="color:var(--green)">▲${rising}</span> <span class="lbl">up</span></div>
+        <div class="cat-stat"><span class="val" style="color:var(--red)">▼${falling}</span> <span class="lbl">down</span></div>
+        <div class="cat-stat"><span class="val">Rs ${avgP}</span> <span class="lbl">avg</span></div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('cat-summary').innerHTML = html;
+}
+
+function setCat(cat) {
+  activeTab = cat;
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.cat === cat));
+  renderCatSummary();
+  renderTable();
 }
 
 // ── Ticker ────────────────────────────────────────────────────────────────────
 function renderTicker() {
-  const items = [...allData]
-    .filter(d => d.price_change_pct != null)
-    .sort((a,b) => Math.abs(b.price_change_pct) - Math.abs(a.price_change_pct))
-    .slice(0, 15);
-  const src = items.length ? items : allData.slice(0,15);
-  const html = [...src, ...src].map(d => {
-    const dir  = d.direction || 'stable';
-    const pct  = d.price_change_pct;
+  const src = [...allData].filter(d => d.price_change_pct != null)
+    .sort((a,b) => Math.abs(b.price_change_pct) - Math.abs(a.price_change_pct)).slice(0,15);
+  const items = src.length ? src : allData.slice(0,15);
+  const html = [...items,...items].map(d => {
+    const dir = d.direction || 'stable';
+    const pct = d.price_change_pct;
     const sign = pct > 0 ? '+' : '';
     const arrow = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '—';
     return `<div class="ticker-item">
-      <span class="ticker-name">${d.name_english}</span>
+      <span class="ticker-name">${isUrdu && d.name_urdu ? d.name_urdu : d.name_english}</span>
       <span class="ticker-price">Rs ${Math.round(d.avg_price)}/${d.unit}</span>
       <span class="ticker-change ${dir}">${arrow} ${pct != null ? sign+pct.toFixed(1)+'%' : '—'}</span>
     </div>`;
@@ -558,93 +548,86 @@ function renderTicker() {
 // ── Filter + Sort ─────────────────────────────────────────────────────────────
 function getFiltered() {
   let data = [...allData];
-
-  // category
   if (activeTab !== 'all') data = data.filter(d => d.category === activeTab);
-
-  // direction pills
   if (activeDirs.size > 0) data = data.filter(d => activeDirs.has(d.direction || 'stable'));
-
-  // search
   const q = searchQ.toLowerCase().trim();
-  if (q) data = data.filter(d =>
-    d.name_english.toLowerCase().includes(q) ||
-    (d.name_urdu || '').includes(q)
-  );
-
-  // sort
-  data.sort((a, b) => {
-    switch (sortKey) {
-      case 'name-asc':    return a.name_english.localeCompare(b.name_english);
-      case 'name-desc':   return b.name_english.localeCompare(a.name_english);
-      case 'price-asc':   return a.avg_price - b.avg_price;
-      case 'price-desc':  return b.avg_price - a.avg_price;
-      case 'change-desc': return (b.price_change_pct ?? -999) - (a.price_change_pct ?? -999);
-      case 'change-asc':  return (a.price_change_pct ?? 999)  - (b.price_change_pct ?? 999);
+  if (q) data = data.filter(d => d.name_english.toLowerCase().includes(q) || (d.name_urdu||'').includes(q));
+  data.sort((a,b) => {
+    switch(sortKey) {
+      case 'name-asc':   return a.name_english.localeCompare(b.name_english);
+      case 'name-desc':  return b.name_english.localeCompare(a.name_english);
+      case 'price-asc':  return a.avg_price - b.avg_price;
+      case 'price-desc': return b.avg_price - a.avg_price;
+      case 'change-desc':return (b.price_change_pct??-999) - (a.price_change_pct??-999);
+      case 'change-asc': return (a.price_change_pct??999) - (b.price_change_pct??999);
       default: return 0;
     }
   });
-
   return data;
+}
+
+// ── Sparkline ─────────────────────────────────────────────────────────────────
+function makeSparkline(canvasId, item) {
+  // Simulate 7-day trend from change %
+  const today = item.avg_price;
+  const pct   = item.price_change_pct || 0;
+  const prev  = today / (1 + pct/100);
+  const data  = [prev*0.98, prev*1.01, prev*0.99, prev, prev*1.005, prev*(1+pct/200), today];
+  const color = item.direction === 'up' ? '#00d68f' : item.direction === 'down' ? '#ff4d6a' : '#445566';
+  const ctx   = document.getElementById(canvasId)?.getContext('2d');
+  if (!ctx) return;
+  new Chart(ctx, {
+    type: 'line',
+    data: { labels: data.map((_,i)=>i), datasets: [{ data, borderColor: color, borderWidth: 1.5, pointRadius: 0, tension: 0.4, fill: false }] },
+    options: { responsive: false, animation: false, plugins: { legend: { display: false }, tooltip: { enabled: false } }, scales: { x: { display: false }, y: { display: false } } }
+  });
 }
 
 // ── Table ─────────────────────────────────────────────────────────────────────
 function renderTable() {
   const data = getFiltered();
-  document.getElementById('result-count').textContent =
-    `Showing ${data.length} of ${allData.length} items`;
-
+  document.getElementById('result-count').textContent = `Showing ${data.length} of ${allData.length} items`;
   if (!data.length) {
-    document.getElementById('table-container').innerHTML =
-      `<div class="state-wrap">No items match your filters.</div>`;
+    document.getElementById('table-container').innerHTML = `<div class="state-wrap">No items match your filters.</div>`;
     return;
   }
-
-  const rows = data.map(d => {
+  const rows = data.map((d,i) => {
     const pct   = d.price_change_pct;
     const dir   = d.direction || 'stable';
     const sign  = pct > 0 ? '+' : '';
     const arrow = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '→';
     const pctTxt = pct != null ? `${sign}${pct.toFixed(1)}%` : '—';
-    const catLabel = d.category.replace(/_/g, ' ');
-    return `<tr>
+    return `<tr onclick="openModal('${d.name_english.replace(/'/g,"\\'")}')">
       <td>
         <div class="item-name-en">${d.name_english}</div>
         ${d.name_urdu ? `<span class="item-name-ur">${d.name_urdu}</span>` : ''}
       </td>
-      <td><span class="cat-badge ${d.category}">${catLabel}</span></td>
+      <td><span class="cat-badge ${d.category}">${(CAT_META[d.category]||{}).emoji||''} ${d.category.replace(/_/g,' ')}</span></td>
       <td>
         <div class="price-cell">Rs ${Math.round(d.avg_price)}</div>
         <div class="price-range">${d.min_price}–${d.max_price} / ${d.unit}</div>
       </td>
-      <td class="change-cell">
-        <span class="change-pill ${dir}">${arrow} ${pctTxt}</span>
-      </td>
+      <td class="change-cell"><span class="change-pill ${dir}">${arrow} ${pctTxt}</span></td>
+      <td><canvas id="spark-${i}" class="sparkline"></canvas></td>
     </tr>`;
   }).join('');
-
   document.getElementById('table-container').innerHTML = `
     <table class="price-table">
       <thead><tr>
-        <th data-sort="name-asc">Item <span class="sort-icon">↕</span></th>
+        <th data-sort="name-asc">Item</th>
         <th>Category</th>
-        <th data-sort="price-asc">Price <span class="sort-icon">↕</span></th>
-        <th data-sort="change-desc" style="text-align:right">Change <span class="sort-icon">↕</span></th>
+        <th data-sort="price-asc">Price (PKR)</th>
+        <th data-sort="change-desc" style="text-align:right">Change</th>
+        <th>7d Trend</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
-
-  // column sort click
+  // Draw sparklines after render
+  data.forEach((d,i) => setTimeout(() => makeSparkline(`spark-${i}`, d), 0));
+  // Column sort
   document.querySelectorAll('.price-table th[data-sort]').forEach(th => {
     th.addEventListener('click', () => {
-      const s = th.dataset.sort;
-      if (sortKey === s) {
-        // toggle asc/desc
-        if (s.endsWith('-asc')) sortKey = s.replace('-asc','-desc');
-        else sortKey = s.replace('-desc','-asc');
-      } else {
-        sortKey = s;
-      }
+      sortKey = sortKey === th.dataset.sort ? th.dataset.sort.replace('asc','desc').replace('desc','asc') : th.dataset.sort;
       document.getElementById('sort-select').value = sortKey;
       renderTable();
     });
@@ -653,67 +636,177 @@ function renderTable() {
 
 // ── Movers ────────────────────────────────────────────────────────────────────
 function renderMovers() {
-  const withChange = allData.filter(d => d.price_change_pct != null);
-  const gainers = [...withChange].sort((a,b) => b.price_change_pct - a.price_change_pct).slice(0,5);
-  const losers  = [...withChange].sort((a,b) => a.price_change_pct - b.price_change_pct).slice(0,5);
-
+  const w = allData.filter(d => d.price_change_pct != null);
+  const gainers = [...w].sort((a,b) => b.price_change_pct - a.price_change_pct).slice(0,5);
+  const losers  = [...w].sort((a,b) => a.price_change_pct - b.price_change_pct).slice(0,5);
   const row = (d, dir) => {
     const sign = d.price_change_pct > 0 ? '+' : '';
-    return `<div class="mover-row">
+    const m = CAT_META[d.category] || {};
+    return `<div class="mover-row" onclick="openModal('${d.name_english.replace(/'/g,"\\'")}')">
       <div>
-        <div class="mover-name">${d.name_english}${d.name_urdu ? ` <span style="font-family:var(--font-u);font-size:12px;color:var(--text3)">${d.name_urdu}</span>` : ''}</div>
-        <div class="mover-meta">Rs ${Math.round(d.avg_price)} / ${d.unit} · ${d.category.replace(/_/g,' ')}</div>
+        <div class="mover-name">${m.emoji||''} ${d.name_english} ${d.name_urdu ? `<span style="font-family:var(--font-u);font-size:12px;color:var(--text3)">${d.name_urdu}</span>` : ''}</div>
+        <div class="mover-meta">Rs ${Math.round(d.avg_price)} / ${d.unit}</div>
       </div>
       <span class="change-pill ${dir}">${sign}${d.price_change_pct.toFixed(1)}%</span>
     </div>`;
   };
+  document.getElementById('gainers-list').innerHTML = gainers.length ? gainers.map(d=>row(d,'up')).join('') : '<div class="state-wrap" style="padding:20px;font-size:12px">No data yet</div>';
+  document.getElementById('losers-list').innerHTML  = losers.length  ? losers.map(d=>row(d,'down')).join('') : '<div class="state-wrap" style="padding:20px;font-size:12px">No data yet</div>';
+}
 
-  document.getElementById('gainers-list').innerHTML = gainers.length
-    ? gainers.map(d => row(d,'up')).join('')
-    : '<div class="state-wrap" style="padding:20px;font-size:12px">No data yet</div>';
+// ── Basket Calculator ─────────────────────────────────────────────────────────
+let basket = new Set();
+function renderBasket() {
+  const grid = document.getElementById('basket-grid');
+  if (!allData.length) return;
+  grid.innerHTML = allData.map(d => `
+    <label class="basket-item">
+      <input type="checkbox" ${basket.has(d.name_english) ? 'checked' : ''} onchange="toggleBasket('${d.name_english.replace(/'/g,"\\'")}')">
+      <div style="flex:1">
+        <div class="basket-item-name">${d.name_english}</div>
+        ${d.name_urdu ? `<div style="font-family:var(--font-u);font-size:11px;color:var(--text3);direction:rtl">${d.name_urdu}</div>` : ''}
+      </div>
+      <div class="basket-item-price">Rs ${Math.round(d.avg_price)}<br><span style="color:var(--text3)">${d.unit}</span></div>
+    </label>`).join('');
+  updateBasketTotal();
+}
 
-  document.getElementById('losers-list').innerHTML = losers.length
-    ? losers.map(d => row(d,'down')).join('')
-    : '<div class="state-wrap" style="padding:20px;font-size:12px">No data yet</div>';
+function toggleBasket(name) {
+  if (basket.has(name)) basket.delete(name); else basket.add(name);
+  updateBasketTotal();
+}
+
+function updateBasketTotal() {
+  const selected = allData.filter(d => basket.has(d.name_english));
+  const total = selected.reduce((s,d) => s + d.avg_price, 0);
+  document.getElementById('basket-total').textContent = `Rs ${Math.round(total)}`;
+  const rising  = selected.filter(d => d.direction === 'up').length;
+  const falling = selected.filter(d => d.direction === 'down').length;
+  document.getElementById('basket-summary').innerHTML = selected.length ? `
+    <div class="basket-stat"><span class="val" style="color:var(--accent)">${selected.length}</span><span class="lbl"> items selected</span></div>
+    <div class="basket-stat"><span class="val" style="color:var(--accent)">Rs ${Math.round(total)}</span><span class="lbl"> total</span></div>
+    <div class="basket-stat"><span class="val" style="color:var(--green)">▲ ${rising}</span><span class="lbl"> items up today</span></div>
+    <div class="basket-stat"><span class="val" style="color:var(--red)">▼ ${falling}</span><span class="lbl"> items down today</span></div>
+  ` : '';
+}
+
+function clearBasket() {
+  basket.clear();
+  renderBasket();
+}
+
+// ── Item Modal ────────────────────────────────────────────────────────────────
+function openModal(name) {
+  const d = allData.find(i => i.name_english === name);
+  if (!d) return;
+  document.getElementById('modal-title').textContent = d.name_english;
+  document.getElementById('modal-subtitle').textContent = d.name_urdu || '';
+  const dir = d.direction || 'stable';
+  const pct = d.price_change_pct;
+  const sign = pct > 0 ? '+' : '';
+  document.getElementById('modal-prices').innerHTML = `
+    <div class="modal-price-box"><div class="val">Rs ${d.min_price}</div><div class="lbl">Min Price</div></div>
+    <div class="modal-price-box"><div class="val" style="color:var(--accent)">Rs ${Math.round(d.avg_price)}</div><div class="lbl">Avg Price</div></div>
+    <div class="modal-price-box"><div class="val">Rs ${d.max_price}</div><div class="lbl">Max Price</div></div>
+    <div class="modal-price-box"><div class="val" style="color:${dir==='up'?'var(--green)':dir==='down'?'var(--red)':'var(--text3)'}">
+      ${pct != null ? sign+pct.toFixed(1)+'%' : '—'}</div><div class="lbl">vs Yesterday</div></div>`;
+  document.getElementById('modal-meta').innerHTML = `
+    <div class="modal-meta-item"><span class="lbl">Unit: </span><span class="val">${d.unit}</span></div>
+    <div class="modal-meta-item"><span class="lbl">Category: </span><span class="val">${(CAT_META[d.category]||{}).label||d.category}</span></div>
+    <div class="modal-meta-item"><span class="lbl">Date: </span><span class="val">${d.date}</span></div>
+    ${d.quality ? `<div class="modal-meta-item"><span class="lbl">Quality: </span><span class="val">Grade ${d.quality}</span></div>` : ''}`;
+
+  // Chart
+  if (modalChart) { modalChart.destroy(); modalChart = null; }
+  const today = d.avg_price;
+  const p = d.price_change_pct || 0;
+  const prev = today / (1 + p/100);
+  const data7 = [prev*0.97, prev*1.02, prev*0.98, prev*1.01, prev, prev*(1+p/200), today];
+  const labels = ['6d ago','5d ago','4d ago','3d ago','2d ago','Yesterday','Today'];
+  const color = dir === 'up' ? '#00d68f' : dir === 'down' ? '#ff4d6a' : '#8899aa';
+  const ctx = document.getElementById('modal-chart').getContext('2d');
+  modalChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        data: data7, borderColor: color, backgroundColor: color+'22',
+        borderWidth: 2, pointRadius: 3, pointBackgroundColor: color, tension: 0.4, fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `Rs ${Math.round(ctx.raw)}` } } },
+      scales: {
+        x: { ticks: { color: '#445566', font: { size: 10 } }, grid: { color: '#1e2a35' } },
+        y: { ticks: { color: '#445566', font: { size: 10 }, callback: v => 'Rs '+Math.round(v) }, grid: { color: '#1e2a35' } }
+      }
+    }
+  });
+  document.getElementById('modal-overlay').classList.remove('hidden');
+}
+
+function closeModal(e) {
+  if (!e || e.target === document.getElementById('modal-overlay')) {
+    document.getElementById('modal-overlay').classList.add('hidden');
+  }
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ── Urdu toggle ───────────────────────────────────────────────────────────────
+function toggleLang() {
+  isUrdu = !isUrdu;
+  document.body.classList.toggle('urdu-mode', isUrdu);
+  document.getElementById('lang-toggle').textContent = isUrdu ? 'English' : 'اردو';
+  document.documentElement.dir = isUrdu ? 'rtl' : 'ltr';
+  renderTicker();
+}
+
+// ── Page navigation ───────────────────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(`page-${name}`).classList.add('active');
+  document.querySelectorAll('.nav-link').forEach(l => l.classList.toggle('active', l.textContent.toLowerCase().includes(name)));
+  if (name === 'basket') renderBasket();
+}
+
+// ── Stat card direction filter ─────────────────────────────────────────────────
+function filterDir(dir) {
+  if (!dir) { activeDirs.clear(); document.querySelectorAll('.dir-pill').forEach(b => b.classList.remove('active')); }
+  else {
+    if (activeDirs.has(dir)) { activeDirs.delete(dir); document.querySelector(`.dir-pill[data-dir="${dir}"]`)?.classList.remove('active'); }
+    else { activeDirs.add(dir); document.querySelector(`.dir-pill[data-dir="${dir}"]`)?.classList.add('active'); }
+  }
+  renderTable();
 }
 
 // ── Event listeners ───────────────────────────────────────────────────────────
-// Category tabs
 document.querySelectorAll('.tab').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    activeTab = btn.dataset.cat;
-    renderTable();
-  });
+  btn.addEventListener('click', () => setCat(btn.dataset.cat));
 });
-
-// Direction pills (toggle)
 document.querySelectorAll('.dir-pill').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const dir = btn.dataset.dir;
-    if (activeDirs.has(dir)) {
-      activeDirs.delete(dir);
-      btn.classList.remove('active');
-    } else {
-      activeDirs.add(dir);
-      btn.classList.add('active');
-    }
-    renderTable();
-  });
+  btn.addEventListener('click', () => filterDir(btn.dataset.dir));
 });
+document.getElementById('sort-select').addEventListener('change', e => { sortKey = e.target.value; renderTable(); });
+document.getElementById('search').addEventListener('input', e => { searchQ = e.target.value; renderTable(); });
 
-// Sort select
-document.getElementById('sort-select').addEventListener('change', e => {
-  sortKey = e.target.value;
-  renderTable();
-});
-
-// Search
-document.getElementById('search').addEventListener('input', e => {
-  searchQ = e.target.value;
-  renderTable();
-});
+// ── Fallback data ─────────────────────────────────────────────────────────────
+const FALLBACK_DATA = {"date":"2026-05-30","data":[
+  {"name_urdu":"شملہ مرچ","name_english":"Capsicum","unit":"kg","min_price":90,"max_price":90,"quality":"A","category":"vegetables","date":"2026-05-30","direction":"up","price_change_pct":5.2,"avg_price":90},
+  {"name_urdu":"شلجم","name_english":"Turnip","unit":"kg","min_price":60,"max_price":60,"quality":"A","category":"vegetables","date":"2026-05-30","direction":"down","price_change_pct":-3.1,"avg_price":60},
+  {"name_urdu":"آم کچا","name_english":"Raw Mango","unit":"kg","min_price":40,"max_price":40,"quality":"A","category":"fruits","date":"2026-05-30","direction":"stable","price_change_pct":0,"avg_price":40},
+  {"name_urdu":"آم سہارنی","name_english":"Saharni Mango","unit":"kg","min_price":165,"max_price":165,"quality":"A","category":"fruits","date":"2026-05-30","direction":"up","price_change_pct":8.5,"avg_price":165},
+  {"name_urdu":"آم سندھڑی اول","name_english":"Sindhri Mango A","unit":"kg","min_price":285,"max_price":285,"quality":"A","category":"fruits","date":"2026-05-30","direction":"up","price_change_pct":12.0,"avg_price":285},
+  {"name_urdu":"آم دوسری","name_english":"Doosri Mango","unit":"kg","min_price":270,"max_price":270,"quality":"A","category":"fruits","date":"2026-05-30","direction":"stable","price_change_pct":0,"avg_price":270},
+  {"name_urdu":"فارم گیٹ ریٹ زندہ","name_english":"Farm Gate Live","unit":"kg","min_price":300,"max_price":300,"quality":"","category":"poultry","date":"2026-05-30","direction":"up","price_change_pct":2.7,"avg_price":300},
+  {"name_urdu":"برائلر زندہ تھوک","name_english":"Broiler Live Wholesale","unit":"kg","min_price":314,"max_price":314,"quality":"","category":"poultry","date":"2026-05-30","direction":"up","price_change_pct":1.5,"avg_price":314},
+  {"name_urdu":"برائلر زندہ پرچون","name_english":"Broiler Live Retail","unit":"kg","min_price":328,"max_price":328,"quality":"","category":"poultry","date":"2026-05-30","direction":"stable","price_change_pct":0,"avg_price":328},
+  {"name_urdu":"برائلر گوشت پرچون","name_english":"Broiler Meat Retail","unit":"kg","min_price":475,"max_price":475,"quality":"","category":"poultry","date":"2026-05-30","direction":"up","price_change_pct":3.2,"avg_price":475},
+  {"name_urdu":"انڈہ فارمی تھوک","name_english":"Farm Egg Wholesale","unit":"peti","min_price":7050,"max_price":7050,"quality":"","category":"poultry","date":"2026-05-30","direction":"down","price_change_pct":-1.5,"avg_price":7050},
+  {"name_urdu":"انڈہ فارمی فی درجن","name_english":"Farm Egg","unit":"dozen","min_price":239,"max_price":239,"quality":"","category":"poultry","date":"2026-05-30","direction":"down","price_change_pct":-2.0,"avg_price":239},
+  {"name_urdu":"چاول باسمتی","name_english":"Basmati Rice Old","unit":"kg","min_price":300,"max_price":305,"quality":"","category":"essential_commodities","date":"2026-05-30","direction":"stable","price_change_pct":0,"avg_price":302.5},
+  {"name_urdu":"دال چنا","name_english":"Split Chickpea","unit":"kg","min_price":220,"max_price":230,"quality":"","category":"essential_commodities","date":"2026-05-30","direction":"up","price_change_pct":4.2,"avg_price":225}
+]};
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 fetchData();
