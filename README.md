@@ -4,47 +4,58 @@
 > AI-powered OCR from Punjab Government official data. Built by [QA Pulse by SK](https://skakarh.com)
 
 [![Live UI](https://img.shields.io/badge/Live-GitHub%20Pages-blue)](https://shahnawazkakarh.github.io/price-pulse-lahore)
-[![API Docs](https://img.shields.io/badge/API-FastAPI-green)](https://price-pulse-lahore.vercel.app/docs)
+[![API](https://img.shields.io/badge/API-Vercel-black)](https://price-pulse-lahore.vercel.app)
+[![API Docs](https://img.shields.io/badge/Docs-FastAPI-green)](https://price-pulse-lahore.vercel.app/docs)
 [![Data Source](https://img.shields.io/badge/Data-Punjab%20Govt-orange)](https://lahore.punjab.gov.pk/market_rates)
 [![Python](https://img.shields.io/badge/Python-3.12-blue)](https://python.org)
-[![Model](https://img.shields.io/badge/AI-Gemini%202.5%20Flash-purple)](https://aistudio.google.com)
+[![AI](https://img.shields.io/badge/AI-Gemini%202.5%20Flash-purple)](https://aistudio.google.com)
 
 ---
 
 ## What is this?
 
-**Price Pulse Lahore** automatically scrapes the official Punjab Government daily market rate JPEGs, extracts structured price data using **Google Gemini 2.5 Flash Vision AI**, stores it in a time-series database, and serves it via a REST API with a live ticker UI.
+**Price Pulse Lahore** automatically scrapes the official Punjab Government daily market rate JPEGs, extracts structured price data using **Google Gemini 2.5 Flash Vision AI**, stores it in a PostgreSQL database, and serves it via a REST API with a live dashboard UI.
 
-People of Lahore can check today's prices, see what went up or down, search items, and filter by category — without navigating government websites.
+People of Lahore can check today's prices, see what went up or down, search items, filter by category, and calculate their weekly grocery basket — without navigating government websites.
 
 ---
 
-## Live Links
+## Live
 
-| Resource | URL |
+| | URL |
 |---|---|
-| Live UI | https://shahnawazkakarh.github.io/price-pulse-lahore |
-| API | https://price-pulse-lahore.vercel.app |
-| API Docs | https://price-pulse-lahore.vercel.app/docs |
-| Data Source | https://lahore.punjab.gov.pk/market_rates |
+| 🌐 **Live UI** | https://shahnawazkakarh.github.io/price-pulse-lahore |
+| ⚡ **API** | https://price-pulse-lahore.vercel.app |
+| 📖 **API Docs** | https://price-pulse-lahore.vercel.app/docs |
+| 📊 **Data Source** | https://lahore.punjab.gov.pk/market_rates |
 
 ---
 
 ## Features
 
-- [x] Automated daily scraper — runs at 7:30am PKT via GitHub Actions cron
-- [x] AI Vision OCR — Gemini 2.5 Flash extracts prices from government JPEGs
-- [x] Failure alerts via Telegram
-- [x] PostgreSQL + Supabase time-series storage
-- [x] REST API with FastAPI — 12 endpoints, rate limiting, CORS
-- [x] Live ticker UI on GitHub Pages — search, filters, sort, movers
-- [x] 7-day sparkline trend charts per item
-- [x] Basket calculator — select items, see total grocery cost
-- [x] Item detail modal with price chart
-- [x] Category summary cards with inflation signal
-- [x] Alert banner — biggest price mover of the day
-- [x] Urdu / bilingual toggle (RTL support)
-- [x] Analytics API — anomaly detection, inflation index, linear forecast
+**Data**
+- Automated daily scraper — government JPEG images downloaded every morning
+- AI Vision OCR — Gemini 2.5 Flash extracts structured prices from images
+- PostgreSQL + Supabase for time-series storage
+- JSON fallback — works without database in development
+
+**UI** — [shahnawazkakarh.github.io/price-pulse-lahore](https://shahnawazkakarh.github.io/price-pulse-lahore)
+- Live scrolling price ticker
+- Category summary cards with inflation signal
+- Sortable, filterable price table with 7-day sparklines
+- Click any item → detail modal with price chart
+- 🛒 Basket calculator — select items, see total cost
+- 🔥 Alert banner — biggest mover of the day
+- اردو Urdu / English bilingual toggle (RTL support)
+- Top gainers & losers section
+
+**API** — [price-pulse-lahore.vercel.app/docs](https://price-pulse-lahore.vercel.app/docs)
+- 12 REST endpoints with rate limiting and CORS
+- Analytics: anomaly detection, inflation index, price forecasting
+
+**Automation**
+- GitHub Actions cron — runs daily, zero manual work
+- Failure alerts via Telegram
 
 ### 🤖 ML Roadmap
 
@@ -64,255 +75,135 @@ People of Lahore can check today's prices, see what went up or down, search item
 ```
 price-pulse-lahore/
 ├── scraper/
-│   ├── scraper.py         # Fetches images from gov site (1 per category)
-│   ├── ocr.py             # Gemini 2.5 Flash extracts prices from images
-│   └── pipeline.py        # Orchestrates: scrape → OCR → DB/JSON
+│   ├── scraper.py         # Fetches images from gov site
+│   ├── ocr.py             # Gemini Vision extracts prices
+│   └── pipeline.py        # Daily orchestrator: scrape → OCR → DB
 ├── api/
-│   ├── main.py            # FastAPI — 12 REST endpoints
-│   └── analytics.py       # ML & Analytics endpoints
+│   ├── main.py            # FastAPI — core price endpoints
+│   └── analytics.py       # Analytics & ML endpoints
 ├── db/
-│   ├── models.py          # SQLAlchemy ORM: items, price_readings, scrape_logs
-│   ├── database.py        # Connection, sessions, TimescaleDB setup
-│   └── crud.py            # Fuzzy matching, price upsert, query helpers
+│   ├── models.py          # SQLAlchemy ORM models
+│   ├── database.py        # Connection & session management
+│   └── crud.py            # Fuzzy matching, upserts, query helpers
 ├── alerts/
-│   └── telegram.py        # Failure alerting via Telegram bot
-├── alembic/               # DB migration versioning
+│   └── telegram.py        # Failure alerting
 ├── docs/
 │   └── index.html         # GitHub Pages live UI
+├── .github/
+│   └── workflows/
+│       └── daily_pipeline.yml  # GitHub Actions cron job
 ├── data/
 │   ├── images/            # Downloaded JPEGs (local cache)
-│   └── daily/             # OCR output JSON (DB fallback)
+│   └── daily/             # JSON fallback output
+├── seed_db.py             # One-time DB seeder from JSON files
 ├── .env.example           # Environment variable template
-├── requirements.txt       # Python dependencies
-├── setup.sh               # One-command setup script
-├── railway.toml           # Railway deployment config
-└── Procfile               # Process definitions
+├── requirements.txt
+└── setup.sh               # One-command local setup
 ```
 
 ---
 
 ## Quick Start
 
-### 1. Clone & setup
-
 ```bash
 git clone https://github.com/ShahnawazKakarh/price-pulse-lahore.git
 cd price-pulse-lahore
-chmod +x setup.sh
-./setup.sh
+chmod +x setup.sh && ./setup.sh
 ```
 
-### 2. Configure environment
+### Environment Variables
 
-```bash
-cp .env.example .env
-# Edit .env and fill in your keys
-```
+Copy `.env.example` to `.env` and fill in:
 
-| Variable | Where to get it | Required |
+| Variable | Description | Required |
 |---|---|---|
-| `GEMINI_API_KEY` | [aistudio.google.com](https://aistudio.google.com) → Get API Key | ✅ Yes |
-| `DATABASE_URL` | Railway Postgres or local PostgreSQL | Production |
-| `TELEGRAM_BOT_TOKEN` | [@BotFather](https://t.me/BotFather) on Telegram | Optional |
-| `TELEGRAM_CHAT_ID` | [@userinfobot](https://t.me/userinfobot) on Telegram | Optional |
-| `TEST_MODE` | `true` = vegetables only, `false` = all 4 categories | Optional |
+| `GEMINI_API_KEY` | Google AI Studio API key | ✅ |
+| `DATABASE_URL` | PostgreSQL connection string (Supabase or local) | Production |
+| `TELEGRAM_BOT_TOKEN` | For failure alerts | Optional |
+| `TELEGRAM_CHAT_ID` | For failure alerts | Optional |
+| `TEST_MODE` | `true` = scrape 1 category only (dev), `false` = all 4 (prod) | Optional |
 
-> **Gemini model used:** `gemini-2.5-flash` — free tier, 20 RPD, 5 RPM
-> Requires `google-genai >= 2.7.0` — install via `pip install --upgrade google-genai`
+---
 
-### 3. Activate virtual environment
+## Running Locally
 
 ```bash
-# Required in every new terminal session
 source venv/bin/activate
-```
 
-### 4. Run the pipeline
-
-```bash
+# Run the daily pipeline (scrape → OCR → save)
 python scraper/pipeline.py
-```
 
-### 5. Start the API
-
-```bash
+# Start the API
 uvicorn api.main:app --reload --port 8000
-# Docs at: http://localhost:8000/docs
-```
 
-### 6. Open the UI
-
-```bash
+# Open the UI locally (API must be running)
 open docs/index.html
+
+# Open API docs
+open http://localhost:8000/docs
+
+# Open live GitHub Pages UI
+open https://shahnawazkakarh.github.io/price-pulse-lahore
+
+# Seed database from existing JSON files
+python seed_db.py
+
+# Force re-scrape (clears processed image cache)
+find data/images/ -name "*.processed" -delete && python scraper/pipeline.py
 ```
 
 ---
 
 ## API Endpoints
 
-### Core Prices
+### Prices
 
-| Method | Endpoint | Description | Rate limit |
-|---|---|---|---|
-| GET | `/` | API info and endpoint list | — |
-| GET | `/health` | Health check — DB status, latest data | — |
-| GET | `/today` | All prices for today (`?category=` filter) | 60/min |
-| GET | `/movers` | Top gainers and losers today | 60/min |
-| GET | `/categories` | Summary stats per category | 60/min |
-| GET | `/search?q=tomato` | Search by name (English or Urdu) | 30/min |
-| GET | `/item/{slug}` | Single item current price | 60/min |
-| GET | `/item/{slug}/history` | Price history — requires DB | 30/min |
+| Endpoint | Description |
+|---|---|
+| `GET /` | API info |
+| `GET /health` | Health check — DB status, latest data date |
+| `GET /today` | All prices today (`?category=vegetables\|fruits\|poultry\|essential_commodities`) |
+| `GET /movers` | Top gainers and losers |
+| `GET /categories` | Summary stats per category |
+| `GET /search?q=tomato` | Search by name in English or Urdu |
+| `GET /item/{slug}` | Single item — current price |
+| `GET /item/{slug}/history` | Price history over time |
 
 ### Analytics & ML
 
-| Method | Endpoint | Description | Phase |
-|---|---|---|---|
-| GET | `/analytics/summary` | Market inflation signal per category | ✅ Live |
-| GET | `/analytics/anomalies` | Unusual price movements (`?threshold=10`) | ✅ Live |
-| GET | `/analytics/forecast/{slug}` | 7-day price forecast with confidence bands | ✅ Live (linear) |
-| GET | `/analytics/inflation-index` | Lahore market price index over time | ✅ Live |
-| GET | `/item/{slug}` | Single item current price | 60/min |
-| GET | `/item/{slug}/history` | Price history — requires DB | 30/min |
-
----
-
-## Useful Commands
-
-```bash
-# ── Setup ──────────────────────────────────────────────────────────────────
-# One-time setup
-chmod +x setup.sh && ./setup.sh
-
-# Activate venv (every new terminal)
-source venv/bin/activate
-
-# Install / upgrade dependencies
-pip install -r requirements.txt
-pip install --upgrade google-genai   # must be >= 2.7.0
-
-# ── Pipeline ───────────────────────────────────────────────────────────────
-# Run full pipeline (scrape → OCR → save)
-python scraper/pipeline.py
-
-# Force re-download (clear processed markers)
-find data/images/ -name "*.processed" -delete && python scraper/pipeline.py
-
-# Test OCR on a single image
-python scraper/ocr.py data/images/your_image.jpg vegetables
-
-# ── API ────────────────────────────────────────────────────────────────────
-# Start API (development, auto-reload)
-uvicorn api.main:app --reload --port 8000
-
-# Start API (production)
-uvicorn api.main:app --host 0.0.0.0 --port 8000
-
-# Open in browser (Mac)
-open http://localhost:8000/docs                               # Interactive API docs
-open http://localhost:8000/today                              # Today's prices
-open http://localhost:8000/health                             # Health check
-
-# Open live GitHub Pages UI
-open https://shahnawazkakarh.github.io/price-pulse-lahore
-
-# Open local UI (needs API running on port 8000)
-open docs/index.html
-
-# Quick API checks via curl
-curl http://localhost:8000/health
-curl http://localhost:8000/today | python3 -m json.tool
-curl http://localhost:8000/movers | python3 -m json.tool
-curl "http://localhost:8000/search?q=tomato"
-
-# ── Database ───────────────────────────────────────────────────────────────
-# Initialise DB manually
-python db/database.py
-
-# Run migrations
-alembic upgrade head
-
-# ── Data ───────────────────────────────────────────────────────────────────
-# Check today's extracted data
-cat data/daily/$(date +%Y-%m-%d).json | python3 -m json.tool
-
-# List all daily JSON files
-ls -la data/daily/
-
-# List downloaded images
-ls -la data/images/
-
-# ── Alerts ─────────────────────────────────────────────────────────────────
-# Test Telegram alerts
-python alerts/telegram.py
-
-# ── Git ────────────────────────────────────────────────────────────────────
-git add -A
-git commit -m "your message"
-git push origin master
-```
-
----
-
-## Environment Modes
-
-| Mode | Setting | Behaviour |
+| Endpoint | Description | Phase |
 |---|---|---|
-| Development | `TEST_MODE=true` | Scrapes vegetables only — 1 OCR call |
-| Production | `TEST_MODE=false` | All 4 categories — 4 OCR calls/day |
-| No DB | `DATABASE_URL` not set | Falls back to `data/daily/*.json` |
+| `GET /analytics/summary` | Market inflation signal per category | ✅ Live |
+| `GET /analytics/anomalies` | Items with unusual price movements | ✅ Live |
+| `GET /analytics/forecast/{slug}` | 7-day price forecast | ✅ Live |
+| `GET /analytics/inflation-index` | Lahore market price index over time | ✅ Live |
+
+Full interactive docs at [price-pulse-lahore.vercel.app/docs](https://price-pulse-lahore.vercel.app/docs)
 
 ---
 
-## Gemini API Notes
+## Deployment
 
-- **Model:** `gemini-2.5-flash` (requires SDK >= 2.7.0)
-- **Free tier limits:** 20 requests/day, 5 requests/minute
-- **We use:** 4 OCR calls/day (1 per category) — well within free limits
-- **Quota resets:** midnight Pacific Time (1pm PKT)
-- **Key source:** [aistudio.google.com/app/api-keys](https://aistudio.google.com/app/api-keys)
-- **Important:** Create key with **no application restrictions**
+### API — Vercel
 
----
+1. Import `ShahnawazKakarh/price-pulse-lahore` from [vercel.com](https://vercel.com)
+2. Framework: **Other**
+3. Add environment variables: `GEMINI_API_KEY`, `DATABASE_URL`, `ENV=production`
+4. Deploy — auto-redeploys on every `git push`
 
-## Vercel Deployment (API)
+### Database — Supabase
 
-```bash
-# 1. Push to GitHub
-git push origin master
+1. Create project at [supabase.com](https://supabase.com)
+2. Use the **Transaction pooler** connection string (port 6543) as `DATABASE_URL`
+3. Run `python -m db.database` to initialise tables
+4. Run `python seed_db.py` to load existing data
 
-# 2. Go to vercel.com → New Project → Import from GitHub
-# Select: ShahnawazKakarh/price-pulse-lahore
-# Framework: Other
+### Cron Job — GitHub Actions
 
-# 3. Add environment variables in Vercel dashboard:
-GEMINI_API_KEY=your_key
-DATABASE_URL=your_supabase_pooler_url
-TEST_MODE=false
-ENV=production
+Runs automatically every day. Trigger manually from:
+**GitHub → Actions → Daily Price Pipeline → Run workflow**
 
-# 4. Deploy — API live at price-pulse-lahore.vercel.app
-```
-
-## GitHub Actions Cron Job
-
-```bash
-# Runs automatically at 2:30 AM UTC (7:30 AM PKT) daily
-# Add secrets in: github.com/ShahnawazKakarh/price-pulse-lahore/settings/secrets/actions
-# Required: GEMINI_API_KEY, DATABASE_URL
-# Optional: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-
-# Manual trigger:
-# GitHub → Actions → Daily Price Pipeline → Run workflow
-```
-
----
-
-## Data Source
-
-Official daily market rates published by the **Government of Punjab, Lahore**.
-Source: [lahore.punjab.gov.pk/market_rates](https://lahore.punjab.gov.pk/market_rates)
-
-Data is extracted from WhatsApp-forwarded JPEG images using Google Gemini 2.5 Flash Vision AI.
+Add repository secrets: `GEMINI_API_KEY`, `DATABASE_URL`
 
 ---
 
@@ -320,15 +211,25 @@ Data is extracted from WhatsApp-forwarded JPEG images using Google Gemini 2.5 Fl
 
 | Layer | Technology |
 |---|---|
-| Scraper | Python 3.12, httpx, BeautifulSoup |
+| Scraper | Python 3.12, httpx, BeautifulSoup4 |
 | AI OCR | Google Gemini 2.5 Flash Vision |
-| Database | PostgreSQL + TimescaleDB |
+| Database | PostgreSQL via Supabase |
 | ORM | SQLAlchemy + Alembic |
 | API | FastAPI, uvicorn, slowapi |
 | Fuzzy matching | rapidfuzz |
 | Alerts | Telegram Bot API |
-| Frontend | Vanilla JS, GitHub Pages |
-| Hosting | Railway |
+| Frontend | Vanilla JS + Chart.js, GitHub Pages |
+| Cron | GitHub Actions |
+| API Hosting | Vercel |
+
+---
+
+## Data Source
+
+Official daily market rates published by the **Government of Punjab, Lahore**.
+[lahore.punjab.gov.pk/market_rates](https://lahore.punjab.gov.pk/market_rates)
+
+Prices are extracted from government-published JPEG images using AI Vision OCR and stored as structured records updated daily.
 
 ---
 
