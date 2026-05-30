@@ -25,8 +25,7 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = os.getenv("SCRAPE_URL_BASE", "https://lahore.punjab.gov.pk")
 
-# TEST_MODE: only scrape vegetables (1 image, 1 OCR call)
-# Set to False in production
+# TEST_MODE: only scrape vegetables (1 image, 1 OCR call) — set false in production
 TEST_MODE = os.getenv("TEST_MODE", "true").lower() == "true"
 
 CATEGORY_URLS = {
