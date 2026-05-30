@@ -23,11 +23,10 @@ logger = logging.getLogger(__name__)
 
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-# gemini-2.0-flash: free tier
-MODEL_NAME = "gemini-2.0-flash"
+# gemini-2.5-flash — free tier: 20 RPD, 5 RPM
+MODEL_NAME = "gemini-2.5-flash"
 
-# Rate limit: respect free tier (15 RPM = 1 request per 4 seconds minimum)
-REQUEST_DELAY_SECONDS = 5
+REQUEST_DELAY_SECONDS = 15  # 5 RPM = 1 per 12s
 
 EXTRACTION_PROMPT = """
 You are a data extraction assistant. This image is a daily market rate list
@@ -50,6 +49,7 @@ Rules:
 - If only one price shown, set both min and max to that value
 - Skip header rows, dates, and non-item rows
 - Include every item you can read, even if partially visible
+- Keep name_english SHORT — max 3 words
 
 Example output:
 [
@@ -61,6 +61,28 @@ Example output:
 
 def image_bytes_to_pil(image_bytes: bytes) -> Image.Image:
     return Image.open(io.BytesIO(image_bytes))
+
+
+def safe_parse_json(raw_text: str) -> list | None:
+    """Try to parse JSON, attempt repair if truncated."""
+    try:
+        return json.loads(raw_text)
+    except json.JSONDecodeError:
+        # Try to repair truncated JSON by closing open brackets
+        try:
+            # Find last complete object
+            last_complete = raw_text.rfind("},")
+            if last_complete > 0:
+                repaired = raw_text[:last_complete + 1] + "]"
+                return json.loads(repaired)
+        except Exception:
+            pass
+        # Try closing just the array
+        try:
+            return json.loads(raw_text.rstrip(",") + "]")
+        except Exception:
+            pass
+        return None
 
 
 def extract_prices_from_image(
@@ -80,7 +102,7 @@ def extract_prices_from_image(
             contents=[EXTRACTION_PROMPT, image],
             config=types.GenerateContentConfig(
                 temperature=0.1,
-                max_output_tokens=4096,
+                max_output_tokens=8192,  # increased from 4096
             ),
         )
 
@@ -89,7 +111,12 @@ def extract_prices_from_image(
         raw_text = re.sub(r"\s*```$", "", raw_text)
         raw_text = raw_text.strip()
 
-        items = json.loads(raw_text)
+        items = safe_parse_json(raw_text)
+
+        if items is None:
+            logger.error(f"[OCR] JSON parse failed for {category}")
+            logger.debug(f"[OCR] Raw: {raw_text[:200]}")
+            return []
 
         if not isinstance(items, list):
             logger.error(f"[OCR] Expected list, got {type(items)}")
@@ -114,16 +141,13 @@ def extract_prices_from_image(
             })
 
         logger.info(f"[OCR] Extracted {len(records)} items from {category}")
-
-        # Respect rate limits between requests
         time.sleep(REQUEST_DELAY_SECONDS)
         return records
 
     except Exception as e:
         err_str = str(e)
         if "429" in err_str and retry_on_429:
-            # Extract retry delay from error message if available
-            retry_delay = 65  # default: wait 65 seconds
+            retry_delay = 65
             match = re.search(r"retry in (\d+)", err_str)
             if match:
                 retry_delay = int(match.group(1)) + 5
@@ -137,14 +161,10 @@ def extract_prices_from_image(
 
 
 def process_all_images(scraped_images: list[dict]) -> tuple[list[dict], list[str]]:
-    """
-    Run OCR on all scraped images.
-    Only processes the LATEST image per category to stay within free quota.
-    """
+    """Run OCR on all scraped images — 1 per category."""
     all_records = []
     failed = []
 
-    # Group by category — only process the first (most recent) image per category
     seen_categories = set()
     images_to_process = []
     for image_data in scraped_images:
