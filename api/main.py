@@ -157,6 +157,104 @@ async def health():
     }
 
 
+@app.get("/dates", tags=["Prices"])
+@limiter.limit("60/minute")
+async def get_dates(request: Request):
+    """
+    List all available dates with price data.
+    Used by UI for date navigation.
+    """
+    # Try DB first
+    try:
+        from db.database import check_connection, get_db
+        if check_connection():
+            with get_db() as db:
+                from sqlalchemy import text
+                result = db.execute(text(
+                    "SELECT DISTINCT DATE(date) as d FROM price_readings ORDER BY d DESC"
+                ))
+                dates = [str(row[0]) for row in result.fetchall()]
+                return {"count": len(dates), "dates": dates}
+    except Exception:
+        pass
+
+    # JSON fallback
+    daily_dir = Path(__file__).parent.parent / "data" / "daily"
+    if not daily_dir.exists():
+        return {"count": 0, "dates": []}
+    files = sorted(daily_dir.glob("*.json"), reverse=True)
+    dates = [f.stem for f in files]
+    return {"count": len(dates), "dates": dates}
+
+
+@app.get("/date/{date}", tags=["Prices"])
+@limiter.limit("60/minute")
+async def get_prices_by_date(
+    request: Request,
+    date: str,
+    category: str = Query(None, description="Filter by category"),
+):
+    """
+    Get all prices for a specific date (YYYY-MM-DD).
+    """
+    # Validate date format
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+
+    # Try DB
+    try:
+        from db.database import check_connection, get_db
+        from db.crud import get_today_prices
+        if check_connection():
+            with get_db() as db:
+                from sqlalchemy import text
+                from db.models import PriceReading, Item
+                from sqlalchemy import func
+                records = (
+                    db.query(PriceReading, Item)
+                    .join(Item, PriceReading.item_id == Item.id)
+                    .filter(func.date(PriceReading.date) == date)
+                    .all()
+                )
+                if not records:
+                    raise HTTPException(status_code=404, detail=f"No data for {date}")
+                data = [
+                    {
+                        "name_english":     item.name_english,
+                        "name_urdu":        item.name_urdu,
+                        "category":         item.category,
+                        "unit":             item.unit,
+                        "min_price":        reading.min_price,
+                        "max_price":        reading.max_price,
+                        "avg_price":        reading.avg_price,
+                        "price_change_pct": reading.price_change_pct,
+                        "direction":        reading.direction,
+                        "date":             date,
+                    }
+                    for reading, item in records
+                    if not category or item.category == category
+                ]
+                return {"date": date, "count": len(data), "data": data}
+    except HTTPException:
+        raise
+    except Exception:
+        pass
+
+    # JSON fallback
+    daily_dir = Path(__file__).parent.parent / "data" / "daily"
+    json_file = daily_dir / f"{date}.json"
+    if not json_file.exists():
+        raise HTTPException(status_code=404, detail=f"No data found for {date}")
+    import json as json_module
+    with open(json_file, encoding="utf-8") as f:
+        records = json_module.load(f)
+    if category:
+        records = [r for r in records if r.get("category") == category]
+    return {"date": date, "count": len(records), "data": records}
+
+
 @app.get("/today", tags=["Prices"])
 @limiter.limit("60/minute")
 async def get_today(

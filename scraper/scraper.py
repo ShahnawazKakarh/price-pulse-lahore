@@ -1,6 +1,6 @@
 """
 Price Pulse Lahore — Scraper
-Fetches daily market rate images from lahore.punjab.gov.pk
+Fetches all available market rate images from lahore.punjab.gov.pk
 QA Pulse by SK · skakarh.com
 """
 
@@ -35,10 +35,9 @@ CATEGORY_URLS = {
     "essential_commodities":  f"{BASE_URL}/commodities-rate-list",
 }
 
-# In test mode only scrape one category
 if TEST_MODE:
     CATEGORY_URLS = {"vegetables": f"{BASE_URL}/vegetables-rate-list"}
-    logger.info("TEST_MODE=true — scraping vegetables only (1 image, 1 OCR call)")
+    logger.info("TEST_MODE=true — scraping vegetables only")
 
 HEADERS = {
     "User-Agent": (
@@ -89,7 +88,10 @@ def extract_image_urls(html: str, base_url: str) -> list[str]:
 
     for img in soup.find_all("img"):
         src = img.get("src", "")
-        if any(kw in src.lower() for kw in ["rate", "price", "market", "list", "vegetable", "poultry", "fruit", "whatsapp", "system/files"]):
+        if any(kw in src.lower() for kw in [
+            "rate", "price", "market", "list", "vegetable",
+            "poultry", "fruit", "whatsapp", "system/files"
+        ]):
             full_url = src if src.startswith("http") else f"{base_url}/{src.lstrip('/')}"
             image_urls.append(full_url)
 
@@ -113,7 +115,21 @@ def extract_image_urls(html: str, base_url: str) -> list[str]:
     return list(dict.fromkeys(image_urls))
 
 
-def download_image(url: str, category: str) -> tuple[bytes, str] | None:
+def extract_filename_from_url(url: str) -> str:
+    """Extract clean filename from URL for date parsing."""
+    import urllib.parse
+    parsed = urllib.parse.urlparse(url)
+    params = urllib.parse.parse_qs(parsed.query)
+    if "file" in params:
+        return urllib.parse.unquote(params["file"][0])
+    return parsed.path.split("/")[-1]
+
+
+def download_image(url: str, category: str) -> tuple[bytes, str, str] | None:
+    """
+    Download an image.
+    Returns (raw_bytes, local_path, filename) or None if already processed.
+    """
     try:
         with httpx.Client(headers=HEADERS, follow_redirects=True, timeout=30) as client:
             r = client.get(url)
@@ -128,20 +144,29 @@ def download_image(url: str, category: str) -> tuple[bytes, str] | None:
                 logger.info(f"[{category}] Already processed (hash match), skipping.")
                 return None
 
+            filename = extract_filename_from_url(url)
             date_str = datetime.now().strftime("%Y-%m-%d")
-            filename = IMAGE_DIR / f"{date_str}_{category}_{image_hash[:8]}.jpg"
-            filename.write_bytes(content)
+            safe_name = re.sub(r'[^\w\-.]', '_', filename)[:50]
+            local_path = IMAGE_DIR / f"{date_str}_{category}_{image_hash[:8]}_{safe_name}.jpg"
+            local_path.write_bytes(content)
             _mark_downloaded(image_hash)
 
-            logger.info(f"[{category}] Downloaded → {filename.name}")
-            return content, str(filename)
+            logger.info(f"[{category}] Downloaded → {local_path.name} (filename: {filename})")
+            return content, str(local_path), filename
 
     except Exception as e:
         logger.error(f"Error downloading {url}: {e}")
         return None
 
 
+import re
+
+
 def scrape_category(category: str, url: str) -> list[dict]:
+    """
+    Download ALL available images for a category.
+    Hash check skips already-processed ones automatically.
+    """
     logger.info(f"[{category}] Scraping {url}")
     results = []
 
@@ -151,25 +176,28 @@ def scrape_category(category: str, url: str) -> list[dict]:
         return results
 
     image_urls = extract_image_urls(html, BASE_URL)
-    logger.info(f"[{category}] Found {len(image_urls)} image(s)")
+    logger.info(f"[{category}] Found {len(image_urls)} image(s) on page")
 
     if not image_urls:
         logger.warning(f"[{category}] No images found — site structure may have changed")
         return results
 
-    # Only download the FIRST (most recent) image per category
-    img_url = image_urls[0]
-    result = download_image(img_url, category)
-    if result:
-        image_bytes, image_path = result
-        results.append({
-            "category":    category,
-            "image_path":  image_path,
-            "image_bytes": image_bytes,
-            "source_url":  img_url,
-            "scraped_at":  datetime.utcnow().isoformat(),
-        })
+    new_count = 0
+    for img_url in image_urls:
+        result = download_image(img_url, category)
+        if result:
+            image_bytes, image_path, filename = result
+            results.append({
+                "category":    category,
+                "image_path":  image_path,
+                "image_bytes": image_bytes,
+                "source_url":  img_url,
+                "filename":    filename,
+                "scraped_at":  datetime.utcnow().isoformat(),
+            })
+            new_count += 1
 
+    logger.info(f"[{category}] {new_count} new image(s) downloaded, {len(image_urls) - new_count} already processed")
     return results
 
 
@@ -177,7 +205,7 @@ def run_scraper() -> tuple[list[dict], list[str]]:
     logger.info("=" * 60)
     logger.info("Price Pulse Lahore — Daily Scrape Starting")
     logger.info(f"UTC: {datetime.utcnow().isoformat()}")
-    logger.info(f"Mode: {'TEST (1 category)' if TEST_MODE else 'PRODUCTION (all categories)'}")
+    logger.info(f"Mode: {'TEST (vegetables only)' if TEST_MODE else 'PRODUCTION (all categories)'}")
     logger.info("=" * 60)
 
     all_results = []
@@ -187,13 +215,13 @@ def run_scraper() -> tuple[list[dict], list[str]]:
         try:
             results = scrape_category(category, url)
             all_results.extend(results)
-            if not results:
+            if not results and not TEST_MODE:
                 failed_categories.append(category)
         except Exception as e:
             logger.error(f"[{category}] Unexpected error: {e}")
             failed_categories.append(category)
 
-    logger.info(f"Scrape complete — {len(all_results)} image(s) downloaded")
+    logger.info(f"Scrape complete — {len(all_results)} new image(s) to process")
     if failed_categories:
         logger.warning(f"Failed: {failed_categories}")
 
@@ -202,6 +230,6 @@ def run_scraper() -> tuple[list[dict], list[str]]:
 
 if __name__ == "__main__":
     results, failed = run_scraper()
-    print(f"\nDone: {len(results)} images ready for OCR")
+    print(f"\nDone: {len(results)} new images ready for OCR")
     if failed:
         print(f"Failed: {failed}")
