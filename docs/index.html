@@ -267,6 +267,16 @@
       <p id="header-urdu">روزانہ منڈی کی قیمتیں — Lahore, Pakistan</p>
     </div>
     <div class="header-right">
+      <!-- Date navigation -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <button id="btn-prev" onclick="navigateDate(-1)" style="padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text2);cursor:pointer;font-family:var(--font-m);font-size:12px">← Prev</button>
+        <div style="text-align:center">
+          <div id="date-display" style="font-family:var(--font-m);font-size:13px;font-weight:600;color:var(--text)">Loading...</div>
+          <div id="date-sub" style="font-family:var(--font-m);font-size:10px;color:var(--text3)"></div>
+        </div>
+        <button id="btn-next" onclick="navigateDate(1)" style="padding:5px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg2);color:var(--text2);cursor:pointer;font-family:var(--font-m);font-size:12px">Next →</button>
+        <button id="btn-today" onclick="goToToday()" style="padding:5px 12px;border:1px solid var(--accent);border-radius:6px;background:var(--green-dim);color:var(--accent);cursor:pointer;font-family:var(--font-m);font-size:12px;font-weight:600">Today</button>
+      </div>
       <div class="last-updated" id="last-updated">Loading...</div>
       <div class="data-source">
         Source: <a href="https://lahore.punjab.gov.pk/market_rates" target="_blank">Punjab Govt</a> ·
@@ -438,26 +448,87 @@ const CAT_META = {
   essential_commodities:{ emoji: '🌾', label: 'Commodities',   color: 'var(--purple)' },
 };
 
-// ── Fetch ─────────────────────────────────────────────────────────────────────
-async function fetchData() {
+// ── Date navigation state ────────────────────────────────────────────────────
+let availableDates = [];
+let currentDateIndex = 0; // 0 = latest
+
+async function fetchDates() {
   try {
-    const res = await fetch(`${BASE}/today`, { signal: AbortSignal.timeout(6000) });
+    const res = await fetch(`${BASE}/dates`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) throw new Error();
+    const json = await res.json();
+    availableDates = json.dates || [];
+  } catch {
+    // fallback — use embedded data date
+    availableDates = [FALLBACK_DATA.date];
+  }
+  updateDateNav();
+}
+
+function updateDateNav() {
+  const date = availableDates[currentDateIndex];
+  if (!date) return;
+  const d = new Date(date + 'T00:00:00');
+  const dayName = d.toLocaleDateString('en-GB', { weekday: 'long' });
+  const formatted = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  document.getElementById('date-display').textContent = formatted;
+  document.getElementById('date-sub').textContent = dayName;
+  // Disable/enable nav buttons
+  document.getElementById('btn-prev').disabled = currentDateIndex >= availableDates.length - 1;
+  document.getElementById('btn-next').disabled = currentDateIndex <= 0;
+  document.getElementById('btn-today').style.opacity = currentDateIndex === 0 ? '0.4' : '1';
+  document.getElementById('btn-prev').style.opacity = currentDateIndex >= availableDates.length - 1 ? '0.4' : '1';
+  document.getElementById('btn-next').style.opacity = currentDateIndex <= 0 ? '0.4' : '1';
+}
+
+async function navigateDate(direction) {
+  const newIndex = currentDateIndex + direction;
+  if (newIndex < 0 || newIndex >= availableDates.length) return;
+  currentDateIndex = newIndex;
+  updateDateNav();
+  await fetchDataForDate(availableDates[currentDateIndex]);
+}
+
+function goToToday() {
+  currentDateIndex = 0;
+  updateDateNav();
+  fetchDataForDate(availableDates[0]);
+}
+
+async function fetchDataForDate(date) {
+  document.getElementById('table-container').innerHTML =
+    '<div class="state-wrap"><div class="spinner"></div><span>Loading prices...</span></div>';
+  try {
+    const res = await fetch(`${BASE}/date/${date}`, { signal: AbortSignal.timeout(6000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     allData = (json.data || []).map(d => ({
       ...d, avg_price: d.avg_price || (d.min_price + d.max_price) / 2,
     }));
+    const isToday = currentDateIndex === 0;
     document.getElementById('last-updated').textContent =
-      `Updated: ${json.date || 'today'} · Live from API · auto-refreshes every 30 min`;
+      isToday ? `Live · auto-refreshes every 30 min` : `Historical data`;
     renderAll();
-  } catch (err) {
-    // Embedded fallback
-    allData = FALLBACK_DATA.data.map(d => ({
-      ...d, avg_price: d.avg_price || (d.min_price + d.max_price) / 2,
-    }));
-    document.getElementById('last-updated').textContent =
-      `Updated: ${FALLBACK_DATA.date} · Embedded data`;
-    renderAll();
+  } catch {
+    useFallback();
+  }
+}
+
+function useFallback() {
+  allData = FALLBACK_DATA.data.map(d => ({
+    ...d, avg_price: d.avg_price || (d.min_price + d.max_price) / 2,
+  }));
+  document.getElementById('last-updated').textContent = `Embedded data · ${FALLBACK_DATA.date}`;
+  renderAll();
+}
+
+// ── Fetch ─────────────────────────────────────────────────────────────────────
+async function fetchData() {
+  await fetchDates();
+  if (availableDates.length > 0) {
+    await fetchDataForDate(availableDates[0]);
+  } else {
+    useFallback();
   }
 }
 
