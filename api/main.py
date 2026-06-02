@@ -170,13 +170,16 @@ async def get_dates(request: Request):
         if check_connection():
             with get_db() as db:
                 from sqlalchemy import text
+                # Use CAST to avoid timezone issues
                 result = db.execute(text(
-                    "SELECT DISTINCT DATE(date) as d FROM price_readings ORDER BY d DESC"
+                    "SELECT DISTINCT CAST(date AS DATE) as d FROM price_readings ORDER BY d DESC"
                 ))
-                dates = [str(row[0]) for row in result.fetchall()]
-                return {"count": len(dates), "dates": dates}
-    except Exception:
-        pass
+                rows = result.fetchall()
+                dates = [str(row[0]) for row in rows if row[0]]
+                if dates:
+                    return {"count": len(dates), "dates": dates}
+    except Exception as e:
+        logger.warning(f"DB dates query failed: {e}")
 
     # JSON fallback
     daily_dir = Path(__file__).parent.parent / "data" / "daily"
@@ -206,41 +209,40 @@ async def get_prices_by_date(
     # Try DB
     try:
         from db.database import check_connection, get_db
-        from db.crud import get_today_prices
         if check_connection():
             with get_db() as db:
                 from sqlalchemy import text
-                from db.models import PriceReading, Item
-                from sqlalchemy import func
-                records = (
-                    db.query(PriceReading, Item)
-                    .join(Item, PriceReading.item_id == Item.id)
-                    .filter(func.date(PriceReading.date) == date)
-                    .all()
-                )
-                if not records:
+                result = db.execute(text(
+                    "SELECT i.name_english, i.name_urdu, i.category, i.unit, "
+                    "r.min_price, r.max_price, r.avg_price, r.price_change_pct, r.direction "
+                    "FROM price_readings r JOIN items i ON r.item_id = i.id "
+                    "WHERE CAST(r.date AS DATE) = :date "
+                    "ORDER BY i.category, i.name_english"
+                ), {"date": date})
+                rows = result.fetchall()
+                if not rows:
                     raise HTTPException(status_code=404, detail=f"No data for {date}")
                 data = [
                     {
-                        "name_english":     item.name_english,
-                        "name_urdu":        item.name_urdu,
-                        "category":         item.category,
-                        "unit":             item.unit,
-                        "min_price":        reading.min_price,
-                        "max_price":        reading.max_price,
-                        "avg_price":        reading.avg_price,
-                        "price_change_pct": reading.price_change_pct,
-                        "direction":        reading.direction,
+                        "name_english":     row[0],
+                        "name_urdu":        row[1],
+                        "category":         row[2],
+                        "unit":             row[3],
+                        "min_price":        row[4],
+                        "max_price":        row[5],
+                        "avg_price":        row[6],
+                        "price_change_pct": row[7],
+                        "direction":        row[8] or "stable",
                         "date":             date,
                     }
-                    for reading, item in records
-                    if not category or item.category == category
+                    for row in rows
+                    if not category or row[2] == category
                 ]
                 return {"date": date, "count": len(data), "data": data}
     except HTTPException:
         raise
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"DB date query failed: {e}")
 
     # JSON fallback
     daily_dir = Path(__file__).parent.parent / "data" / "daily"
