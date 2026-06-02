@@ -472,13 +472,17 @@ function updateDateNav() {
   const dayName = d.toLocaleDateString('en-GB', { weekday: 'long' });
   const formatted = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
   document.getElementById('date-display').textContent = formatted;
-  document.getElementById('date-sub').textContent = dayName;
-  // Disable/enable nav buttons
-  document.getElementById('btn-prev').disabled = currentDateIndex >= availableDates.length - 1;
-  document.getElementById('btn-next').disabled = currentDateIndex <= 0;
-  document.getElementById('btn-today').style.opacity = currentDateIndex === 0 ? '0.4' : '1';
-  document.getElementById('btn-prev').style.opacity = currentDateIndex >= availableDates.length - 1 ? '0.4' : '1';
-  document.getElementById('btn-next').style.opacity = currentDateIndex <= 0 ? '0.4' : '1';
+  document.getElementById('date-sub').textContent = `${dayName} · ${availableDates.length - currentDateIndex} of ${availableDates.length}`;
+  const atOldest = currentDateIndex >= availableDates.length - 1;
+  const atNewest = currentDateIndex <= 0;
+  const btnPrev = document.getElementById('btn-prev');
+  const btnNext = document.getElementById('btn-next');
+  const btnToday = document.getElementById('btn-today');
+  btnPrev.style.opacity = atOldest ? '0.3' : '1';
+  btnPrev.style.pointerEvents = atOldest ? 'none' : 'auto';
+  btnNext.style.opacity = atNewest ? '0.3' : '1';
+  btnNext.style.pointerEvents = atNewest ? 'none' : 'auto';
+  btnToday.style.opacity = atNewest ? '0.4' : '1';
 }
 
 async function navigateDate(direction) {
