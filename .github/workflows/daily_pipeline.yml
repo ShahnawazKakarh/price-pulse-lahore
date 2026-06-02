@@ -27,6 +27,31 @@ jobs:
       - name: Create data directories
         run: mkdir -p data/images data/daily
 
+      - name: Verify DB connection
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python3 - << 'EOF'
+          import os
+          import sys
+          url = os.getenv("DATABASE_URL", "")
+          if not url:
+              print("❌ DATABASE_URL secret is not set!")
+              sys.exit(1)
+          print(f"✅ DATABASE_URL is set ({len(url)} chars)")
+          # Test actual connection
+          try:
+              from sqlalchemy import create_engine, text
+              engine = create_engine(url, connect_args={"connect_timeout": 10})
+              with engine.connect() as conn:
+                  result = conn.execute(text("SELECT COUNT(*) FROM price_readings"))
+                  count = result.scalar()
+                  print(f"✅ DB connected — {count} records in price_readings")
+          except Exception as e:
+              print(f"❌ DB connection failed: {e}")
+              sys.exit(1)
+          EOF
+
       - name: Run pipeline
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
