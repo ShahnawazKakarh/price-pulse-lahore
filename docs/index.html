@@ -454,12 +454,11 @@ let currentDateIndex = 0; // 0 = latest
 
 async function fetchDates() {
   try {
-    const res = await fetch(`${BASE}/dates`, { signal: AbortSignal.timeout(5000) });
+    const res = await fetch(`${BASE}/dates`, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) throw new Error();
     const json = await res.json();
     availableDates = json.dates || [];
   } catch {
-    // fallback — use embedded data date
     availableDates = [FALLBACK_DATA.date];
   }
   updateDateNav();
@@ -503,7 +502,7 @@ async function fetchDataForDate(date) {
   document.getElementById('table-container').innerHTML =
     '<div class="state-wrap"><div class="spinner"></div><span>Loading prices...</span></div>';
   try {
-    const res = await fetch(`${BASE}/date/${date}`, { signal: AbortSignal.timeout(6000) });
+    const res = await fetch(`${BASE}/date/${date}`, { signal: AbortSignal.timeout(12000) });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     allData = (json.data || []).map(d => ({
@@ -513,8 +512,14 @@ async function fetchDataForDate(date) {
     document.getElementById('last-updated').textContent =
       isToday ? `Live · auto-refreshes every 30 min` : `Historical data`;
     renderAll();
-  } catch {
-    useFallback();
+  } catch (err) {
+    // Only use fallback if no real data loaded yet
+    if (allData.length === 0) {
+      useFallback();
+    } else {
+      document.getElementById('table-container').innerHTML =
+        '<div class="state-wrap">⚠ Could not load data for this date. Try again.</div>';
+    }
   }
 }
 
@@ -532,7 +537,16 @@ async function fetchData() {
   if (availableDates.length > 0) {
     await fetchDataForDate(availableDates[0]);
   } else {
-    useFallback();
+    // Retry once after 3 seconds (Vercel cold start)
+    document.getElementById('last-updated').textContent = 'Connecting...';
+    setTimeout(async () => {
+      await fetchDates();
+      if (availableDates.length > 0) {
+        await fetchDataForDate(availableDates[0]);
+      } else {
+        useFallback();
+      }
+    }, 3000);
   }
 }
 
