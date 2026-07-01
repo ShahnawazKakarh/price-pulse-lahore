@@ -174,9 +174,9 @@ find data/images/ -name "*.processed" -delete && python scraper/pipeline.py
 | Endpoint | Description | Phase |
 |---|---|---|
 | `GET /analytics/summary` | Market inflation signal per category | Status: ✅ Live |
-| `GET /analytics/anomalies` | Items with unusual price movements | tatus: ✅ Live |
-| `GET /analytics/forecast/{slug}` | 7-day price forecast | tatus: ✅ Live |
-| `GET /analytics/inflation-index` | Lahore market price index over time | tatus: ✅ Live |
+| `GET /analytics/anomalies` | Items with unusual price movements | Status: ✅ Live |
+| `GET /analytics/forecast/{slug}` | 7-day price forecast | Status: ✅ Live |
+| `GET /analytics/inflation-index` | Lahore market price index over time | Status: ✅ Live |
 
 Full interactive docs at [price-pulse-lahore.vercel.app/docs](https://price-pulse-lahore.vercel.app/docs)
 
