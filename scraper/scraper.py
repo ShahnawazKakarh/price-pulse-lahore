@@ -8,7 +8,7 @@ import hashlib
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -125,11 +125,46 @@ def extract_filename_from_url(url: str) -> str:
     return parsed.path.split("/")[-1]
 
 
+def extract_date_from_filename_str(filename: str) -> datetime | None:
+    """Extract datetime from filename for age checking."""
+    # WhatsApp format: 2026-05-20
+    match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)
+    if match:
+        try:
+            return datetime.strptime(match.group(1), "%Y-%m-%d")
+        except ValueError:
+            pass
+    # DD.MM.YYYY format: 11.02.2026
+    match = re.search(r'(\d{2})\.(\d{2})\.(\d{4})', filename)
+    if match:
+        try:
+            return datetime.strptime(f"{match.group(3)}-{match.group(2)}-{match.group(1)}", "%Y-%m-%d")
+        except ValueError:
+            pass
+    # DD.MM.YYYY format: 21.10.2025
+    match = re.search(r'(\d{2})\.(\d{2})\.(\d{4})', filename)
+    if match:
+        try:
+            return datetime.strptime(f"{match.group(3)}-{match.group(2)}-{match.group(1)}", "%Y-%m-%d")
+        except ValueError:
+            pass
+    return None
+
+
 def download_image(url: str, category: str) -> tuple[bytes, str, str] | None:
     """
     Download an image.
-    Returns (raw_bytes, local_path, filename) or None if already processed.
+    Skips images older than 60 days based on filename date.
+    Returns (raw_bytes, local_path, filename) or None if already processed or too old.
     """
+    # Check date in filename before downloading
+    filename = extract_filename_from_url(url)
+    file_date = extract_date_from_filename_str(filename)
+    if file_date:
+        cutoff = datetime.now() - timedelta(days=60)
+        if file_date < cutoff:
+            logger.info(f"[{category}] Skipping old image ({file_date.date()}): {filename}")
+            return None
     try:
         with httpx.Client(headers=HEADERS, follow_redirects=True, timeout=30) as client:
             r = client.get(url)

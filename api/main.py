@@ -161,7 +161,7 @@ async def health():
 @limiter.limit("60/minute")
 async def get_dates(request: Request):
     """
-    List all available dates with price data.
+    List all available dates with price data (last 90 days only).
     Used by UI for date navigation.
     """
     # Try DB first
@@ -170,9 +170,10 @@ async def get_dates(request: Request):
         if check_connection():
             with get_db() as db:
                 from sqlalchemy import text
-                # Use CAST to avoid timezone issues
                 result = db.execute(text(
-                    "SELECT DISTINCT CAST(date AS DATE) as d FROM price_readings ORDER BY d DESC"
+                    "SELECT DISTINCT CAST(date AS DATE) as d FROM price_readings "
+                    "WHERE date >= NOW() - INTERVAL '90 days' "
+                    "ORDER BY d DESC"
                 ))
                 rows = result.fetchall()
                 dates = [str(row[0]) for row in rows if row[0]]
@@ -182,11 +183,13 @@ async def get_dates(request: Request):
         logger.warning(f"DB dates query failed: {e}")
 
     # JSON fallback
+    from datetime import timedelta
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=90)).strftime("%Y-%m-%d")
     daily_dir = Path(__file__).parent.parent / "data" / "daily"
     if not daily_dir.exists():
         return {"count": 0, "dates": []}
     files = sorted(daily_dir.glob("*.json"), reverse=True)
-    dates = [f.stem for f in files]
+    dates = [f.stem for f in files if f.stem >= cutoff]
     return {"count": len(dates), "dates": dates}
 
 
