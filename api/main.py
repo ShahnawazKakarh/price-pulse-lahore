@@ -172,7 +172,7 @@ async def get_dates(request: Request):
                 from sqlalchemy import text
                 result = db.execute(text(
                     "SELECT DISTINCT CAST(date AS DATE) as d FROM price_readings "
-                    "WHERE date >= NOW() - INTERVAL '90 days' "
+                    "WHERE CAST(date AS DATE) >= CURRENT_DATE - INTERVAL '90 days' "
                     "ORDER BY d DESC"
                 ))
                 rows = result.fetchall()
