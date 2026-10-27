@@ -182,6 +182,28 @@
     .basket-item-name { font-size: 13px; font-weight: 500; color: var(--text); flex: 1; }
     .basket-item-price { font-family: var(--font-m); font-size: 12px; color: var(--text2); }
     .basket-summary { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; gap: 20px; flex-wrap: wrap; }
+    .insights-section { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 0 32px 48px; }
+    .insights-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .insights-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .insights-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+    .insights-header h3 { font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+    .anomaly-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-bottom: 1px solid var(--border); }
+    .anomaly-row:last-child { border-bottom: none; }
+    .anomaly-name { font-size: 13px; font-weight: 600; }
+    .anomaly-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+    .anomaly-badge { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 20px; }
+    .badge-spike { background: rgba(239,68,68,.15); color: var(--red); }
+    .badge-drop  { background: rgba(34,197,94,.15);  color: var(--green); }
+    .badge-high  { border: 1px solid currentColor; }
+    .anomaly-z { font-family: var(--font-m); font-size: 12px; color: var(--text3); }
+    .cat-signal-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 20px; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .cat-signal-row:last-child { border-bottom: none; }
+    .signal-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dot-inflation { background: var(--red); }
+    .dot-deflation { background: var(--green); }
+    .dot-stable    { background: var(--text3); }
+    @media (max-width: 700px) { .insights-grid { grid-template-columns: 1fr; } .insights-section { padding-left: 16px; padding-right: 16px; } }
+
     .basket-stat { font-family: var(--font-m); font-size: 12px; }
     .basket-stat .val { font-size: 16px; font-weight: 700; display: block; }
 
@@ -389,6 +411,25 @@
         <div class="state-wrap"><div class="spinner"></div><span>Loading items...</span></div>
       </div>
       <div class="basket-summary" id="basket-summary"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ML Insights Section -->
+<div class="section-title">Market Insights</div>
+<div class="insights-section">
+  <div class="insights-grid">
+    <div class="insights-card">
+      <div class="insights-header">
+        <h3>⚡ Price Anomalies <span id="anomaly-count" style="font-weight:400;color:var(--text3);font-size:11px"></span></h3>
+      </div>
+      <div id="anomaly-list"><div class="state-wrap" style="padding:28px;font-size:12px"><div class="spinner"></div><span>Detecting anomalies…</span></div></div>
+    </div>
+    <div class="insights-card">
+      <div class="insights-header">
+        <h3>📊 Category Signals</h3>
+      </div>
+      <div id="cat-signals"><div class="state-wrap" style="padding:28px;font-size:12px"><div class="spinner"></div><span>Loading…</span></div></div>
     </div>
   </div>
 </div>
@@ -898,8 +939,86 @@ const FALLBACK_DATA = {"date":"2026-05-30","data":[
 ]};
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+
+// ── ML Insights ───────────────────────────────────────────────────────────────
+async function fetchInsights() {
+  try {
+    const [anomRes, sumRes] = await Promise.all([
+      fetch(`${BASE}/analytics/anomalies?days=30&z_threshold=2.0`, { signal: AbortSignal.timeout(12000) }),
+      fetch(`${BASE}/analytics/summary`, { signal: AbortSignal.timeout(12000) }),
+    ]);
+
+    if (anomRes.ok) {
+      const data = await anomRes.json();
+      renderAnomalies(data.anomalies || []);
+      const el = document.getElementById('anomaly-count');
+      if (el) el.textContent = data.count ? `(${data.count})` : '';
+    } else {
+      document.getElementById('anomaly-list').innerHTML = '<div class="state-wrap" style="padding:20px;font-size:12px">No anomalies today ✓</div>';
+    }
+
+    if (sumRes.ok) {
+      const data = await sumRes.json();
+      renderCatSignals(data.categories || []);
+    }
+  } catch(e) {
+    document.getElementById('anomaly-list').innerHTML = '<div class="state-wrap" style="padding:20px;font-size:12px;color:var(--text3)">Analytics unavailable</div>';
+    document.getElementById('cat-signals').innerHTML  = '<div class="state-wrap" style="padding:20px;font-size:12px;color:var(--text3)">Analytics unavailable</div>';
+  }
+}
+
+function renderAnomalies(list) {
+  const el = document.getElementById('anomaly-list');
+  if (!list.length) {
+    el.innerHTML = '<div class="state-wrap" style="padding:20px;font-size:12px">No anomalies today ✓</div>';
+    return;
+  }
+  el.innerHTML = list.slice(0, 8).map(a => {
+    const badgeClass = a.signal === 'spike' ? 'badge-spike' : 'badge-drop';
+    const severClass = a.severity === 'high' ? 'badge-high' : '';
+    const arrow = a.signal === 'spike' ? '▲' : '▼';
+    const chg = a.price_change_pct != null ? `${a.price_change_pct > 0 ? '+' : ''}${a.price_change_pct.toFixed(1)}%` : '';
+    return `<div class="anomaly-row">
+      <div>
+        <div class="anomaly-name">${a.name_english}</div>
+        <div class="anomaly-sub">${a.category} · Rs ${a.today_price} ${a.unit ? '/ ' + a.unit : ''} ${chg ? '· ' + chg : ''}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="anomaly-badge ${badgeClass} ${severClass}">${arrow} ${a.signal}</span>
+        <span class="anomaly-z">z=${a.z_score}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderCatSignals(cats) {
+  const el = document.getElementById('cat-signals');
+  if (!cats.length) { el.innerHTML = '<div class="state-wrap" style="padding:20px;font-size:12px">No data</div>'; return; }
+  const sorted = [...cats].sort((a, b) => Math.abs(b.avg_change_pct) - Math.abs(a.avg_change_pct));
+  el.innerHTML = sorted.map(c => {
+    const signal = c.signal || 'stable';
+    const dotClass = signal === 'inflationary' ? 'dot-inflation' : signal === 'deflationary' ? 'dot-deflation' : 'dot-stable';
+    const chg = c.avg_change_pct > 0 ? `<span style="color:var(--red)">+${c.avg_change_pct.toFixed(1)}%</span>` :
+                c.avg_change_pct < 0 ? `<span style="color:var(--green)">${c.avg_change_pct.toFixed(1)}%</span>` :
+                `<span style="color:var(--text3)">0%</span>`;
+    const catMeta = CAT_META[c.category] || { emoji: '📦', label: c.category };
+    return `<div class="cat-signal-row">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="signal-dot ${dotClass}"></span>
+        <span>${catMeta.emoji} ${catMeta.label}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        ${chg}
+        <span style="font-size:11px;color:var(--text3)">${c.item_count} items</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 fetchData();
 setInterval(fetchData, 30 * 60 * 1000);
+fetchInsights();
+setInterval(fetchInsights, 30 * 60 * 1000);
 </script>
 </body>
 </html>
