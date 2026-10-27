@@ -1,255 +1,461 @@
 """
-Price Pulse Lahore — ML & Analytics API endpoints
-Rule-based now, ML-powered later as data grows.
+Price Pulse Lahore — ML Analytics API
+Statistical ML: Z-score anomalies, moving averages, day-of-week patterns,
+inflation index, and 7-day linear forecast.
 QA Pulse by SK · skakarh.com
 """
 
+import math
+import logging
+from collections import defaultdict
 from datetime import datetime, timezone, timedelta
+
 from fastapi import APIRouter, HTTPException, Query, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/analytics", tags=["Analytics & ML"])
 limiter = Limiter(key_func=get_remote_address)
 
 
-def load_data():
-    """Load today's price data."""
-    import sys
-    from pathlib import Path
-    sys.path.insert(0, str(Path(__file__).parent.parent))
-    try:
-        from db.database import check_connection, get_db
-        from db.crud import get_today_prices
-        if check_connection():
-            with get_db() as db:
-                return get_today_prices(db)
-    except Exception:
-        pass
-    # JSON fallback
-    import json
-    daily_dir = Path(__file__).parent.parent / "data" / "daily"
-    files = sorted(daily_dir.glob("*.json"), reverse=True) if daily_dir.exists() else []
-    if files:
-        with open(files[0], encoding="utf-8") as f:
-            return json.load(f)
-    return []
+# ── DB helpers ─────────────────────────────────────────────────────────────────
+
+def _db():
+    from db.database import check_connection, get_db
+    if not check_connection():
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    return get_db
 
 
-def load_history(days: int = 30):
-    """Load historical price data from multiple JSON files."""
-    import json
-    from pathlib import Path
-    daily_dir = Path(__file__).parent.parent / "data" / "daily"
-    if not daily_dir.exists():
-        return []
-    files = sorted(daily_dir.glob("*.json"), reverse=True)[:days]
-    all_records = []
-    for f in files:
-        with open(f, encoding="utf-8") as fp:
-            records = json.load(fp)
-            all_records.extend(records)
-    return all_records
+def _query(sql: str, params: dict = None):
+    from db.database import get_db
+    from sqlalchemy import text
+    with get_db() as db:
+        result = db.execute(text(sql), params or {})
+        return result.fetchall()
 
+
+def _stdev(values: list[float]) -> float:
+    if len(values) < 2:
+        return 0.0
+    mean = sum(values) / len(values)
+    variance = sum((v - mean) ** 2 for v in values) / (len(values) - 1)
+    return math.sqrt(variance)
+
+
+def _mean(values: list[float]) -> float:
+    return sum(values) / len(values) if values else 0.0
+
+
+# ── /analytics/anomalies ───────────────────────────────────────────────────────
+
+@router.get("/anomalies")
+async def get_anomalies(
+    request: Request,
+    days: int = Query(30, ge=7, le=90, description="Lookback window for Z-score baseline"),
+    z_threshold: float = Query(2.0, ge=1.0, le=4.0, description="Z-score threshold"),
+):
+    """
+    Z-score anomaly detection.
+    Flags items whose price today deviates > z_threshold std deviations
+    from their mean over the last `days` days.
+    """
+    _db()  # connectivity check
+
+    # Today's prices
+    today_rows = _query("""
+        SELECT i.slug, i.name_english, i.name_urdu, i.category, i.unit,
+               r.avg_price, r.min_price, r.max_price, r.price_change_pct, r.direction,
+               CAST(r.date AS DATE) as d
+        FROM price_readings r
+        JOIN items i ON r.item_id = i.id
+        WHERE CAST(r.date AS DATE) = CURRENT_DATE
+    """)
+
+    if not today_rows:
+        raise HTTPException(status_code=404, detail="No data for today yet")
+
+    # Historical prices per item (last N days, excluding today)
+    history_rows = _query("""
+        SELECT i.slug, r.avg_price, CAST(r.date AS DATE) as d
+        FROM price_readings r
+        JOIN items i ON r.item_id = i.id
+        WHERE CAST(r.date AS DATE) >= CURRENT_DATE - INTERVAL '1 day' * :days
+          AND CAST(r.date AS DATE) < CURRENT_DATE
+        ORDER BY i.slug, d
+    """, {"days": days})
+
+    # Build per-item history map
+    history_map = defaultdict(list)
+    for row in history_rows:
+        history_map[row[0]].append(float(row[1]))
+
+    anomalies = []
+    for row in today_rows:
+        slug, name_en, name_ur, cat, unit, avg, min_p, max_p, chg_pct, direction, d = row
+        hist = history_map.get(slug, [])
+        if len(hist) < 5:
+            continue  # not enough history
+
+        mean  = _mean(hist)
+        stdev = _stdev(hist)
+        if stdev == 0:
+            continue
+
+        z = (float(avg) - mean) / stdev
+        if abs(z) >= z_threshold:
+            anomalies.append({
+                "slug":             slug,
+                "name_english":     name_en,
+                "name_urdu":        name_ur or "",
+                "category":         cat,
+                "unit":             unit,
+                "today_price":      float(avg),
+                "historical_mean":  round(mean, 2),
+                "historical_stdev": round(stdev, 2),
+                "z_score":          round(z, 2),
+                "price_change_pct": float(chg_pct) if chg_pct else None,
+                "direction":        direction or "stable",
+                "severity":         "high" if abs(z) >= 3 else "medium",
+                "signal":           "spike" if z > 0 else "drop",
+                "data_points":      len(hist),
+            })
+
+    anomalies.sort(key=lambda x: abs(x["z_score"]), reverse=True)
+
+    return {
+        "date":        datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "lookback_days": days,
+        "z_threshold": z_threshold,
+        "count":       len(anomalies),
+        "anomalies":   anomalies,
+        "ml_status":   "z_score",
+    }
+
+
+# ── /analytics/trends/{slug} ───────────────────────────────────────────────────
+
+@router.get("/trends/{slug}")
+async def get_trends(
+    request: Request,
+    slug: str,
+    days: int = Query(30, ge=7, le=150, description="Days of history"),
+):
+    """
+    7-day moving average + direction trend for one item.
+    """
+    _db()
+
+    rows = _query("""
+        SELECT CAST(r.date AS DATE) as d, r.avg_price, r.min_price, r.max_price,
+               r.price_change_pct, r.direction
+        FROM price_readings r
+        JOIN items i ON r.item_id = i.id
+        WHERE i.slug = :slug
+          AND CAST(r.date AS DATE) >= CURRENT_DATE - INTERVAL '1 day' * :days
+        ORDER BY d ASC
+    """, {"slug": slug, "days": days})
+
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"Item '{slug}' not found or no history")
+
+    # Name lookup
+    name_row = _query("""
+        SELECT name_english, name_urdu, category, unit FROM items WHERE slug = :slug
+    """, {"slug": slug})
+    name_en = name_row[0][0] if name_row else slug
+    name_ur = name_row[0][1] if name_row else ""
+    category = name_row[0][2] if name_row else ""
+    unit     = name_row[0][3] if name_row else ""
+
+    prices = [float(r[1]) for r in rows]
+    dates  = [str(r[0]) for r in rows]
+
+    # 7-day moving average
+    ma7 = []
+    for i, p in enumerate(prices):
+        window = prices[max(0, i - 6):i + 1]
+        ma7.append(round(_mean(window), 2))
+
+    # Trend direction (last 7 days slope)
+    recent = prices[-7:]
+    if len(recent) >= 2:
+        slope = (recent[-1] - recent[0]) / len(recent)
+        trend = "rising" if slope > 1 else "falling" if slope < -1 else "stable"
+    else:
+        trend = "stable"
+
+    # Build series
+    series = []
+    for i, row in enumerate(rows):
+        series.append({
+            "date":             str(row[0]),
+            "avg_price":        float(row[1]),
+            "min_price":        int(row[2]) if row[2] else None,
+            "max_price":        int(row[3]) if row[3] else None,
+            "ma7":              ma7[i],
+            "price_change_pct": float(row[4]) if row[4] else None,
+            "direction":        row[5] or "stable",
+        })
+
+    # 7-day simple forecast (linear extrapolation)
+    if len(prices) >= 7:
+        avg_daily = (prices[-1] - prices[-7]) / 7
+    elif len(prices) >= 2:
+        avg_daily = (prices[-1] - prices[0]) / len(prices)
+    else:
+        avg_daily = 0
+
+    forecast = []
+    last_price = prices[-1]
+    for i in range(1, 8):
+        pred = round(max(0, last_price + avg_daily * i), 2)
+        margin = round(pred * 0.04 * i, 2)
+        forecast.append({
+            "date":      (datetime.now(timezone.utc) + timedelta(days=i)).strftime("%Y-%m-%d"),
+            "predicted": pred,
+            "lower":     round(max(0, pred - margin), 2),
+            "upper":     round(pred + margin, 2),
+        })
+
+    return {
+        "slug":         slug,
+        "name_english": name_en,
+        "name_urdu":    name_ur or "",
+        "category":     category,
+        "unit":         unit,
+        "days":         days,
+        "data_points":  len(series),
+        "current_price": prices[-1] if prices else None,
+        "trend":        trend,
+        "series":       series,
+        "forecast_7d":  forecast,
+        "ml_status":    "moving_average_linear_forecast",
+    }
+
+
+# ── /analytics/dow-patterns ───────────────────────────────────────────────────
+
+@router.get("/dow-patterns")
+async def get_dow_patterns(
+    request: Request,
+    category: str = Query(None, description="Filter by category"),
+    min_samples: int = Query(3, ge=2, description="Minimum samples per day-of-week to include"),
+):
+    """
+    Day-of-week price patterns.
+    Shows which weekdays have historically higher/lower prices per category.
+    """
+    _db()
+
+    sql = """
+        SELECT i.category, i.name_english, i.slug,
+               EXTRACT(DOW FROM r.date) as dow,
+               AVG(r.avg_price) as avg_price,
+               COUNT(*) as samples
+        FROM price_readings r
+        JOIN items i ON r.item_id = i.id
+        WHERE CAST(r.date AS DATE) >= CURRENT_DATE - INTERVAL '150 days'
+    """
+    params = {}
+    if category:
+        sql += " AND i.category = :category"
+        params["category"] = category
+    sql += " GROUP BY i.category, i.name_english, i.slug, dow HAVING COUNT(*) >= :min_s ORDER BY i.category, i.slug, dow"
+    params["min_s"] = min_samples
+
+    rows = _query(sql, params)
+
+    # Pivot: category → item → dow → avg_price
+    DOW_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"]
+
+    by_category = defaultdict(lambda: defaultdict(dict))
+    for row in rows:
+        cat, name, slug, dow, avg, samples = row
+        by_category[cat][slug]["name_english"] = name
+        by_category[cat][slug]["slug"] = slug
+        by_category[cat][slug].setdefault("days", {})[int(dow)] = {
+            "avg_price": round(float(avg), 2),
+            "samples":   int(samples),
+        }
+
+    # Find cheapest/most expensive day per item
+    result = []
+    for cat, items in by_category.items():
+        cat_items = []
+        for slug, info in items.items():
+            days = info.get("days", {})
+            if not days:
+                continue
+            cheapest = min(days.items(), key=lambda x: x[1]["avg_price"])
+            priciest = max(days.items(), key=lambda x: x[1]["avg_price"])
+            variation = round(
+                (priciest[1]["avg_price"] - cheapest[1]["avg_price"]) /
+                cheapest[1]["avg_price"] * 100, 2
+            ) if cheapest[1]["avg_price"] > 0 else 0
+
+            cat_items.append({
+                "slug":         slug,
+                "name_english": info["name_english"],
+                "cheapest_day": DOW_NAMES[cheapest[0]],
+                "priciest_day": DOW_NAMES[priciest[0]],
+                "variation_pct": variation,
+                "by_day": {
+                    DOW_NAMES[d]: v for d, v in sorted(days.items())
+                },
+            })
+
+        cat_items.sort(key=lambda x: x["variation_pct"], reverse=True)
+        result.append({"category": cat, "items": cat_items})
+
+    return {
+        "lookback_days": 150,
+        "min_samples":   min_samples,
+        "categories":    result,
+        "ml_status":     "day_of_week_aggregation",
+    }
+
+
+# ── /analytics/summary ────────────────────────────────────────────────────────
 
 @router.get("/summary")
 async def get_summary(request: Request):
     """
-    Daily market summary with inflation index per category.
-    Phase 1: rule-based. Phase 2: ML-powered trend detection.
+    Full market summary: today's movers, anomalies count, category signals,
+    and inflation index vs 30 days ago.
     """
-    records = load_data()
-    if not records:
-        raise HTTPException(status_code=404, detail="No data available")
+    _db()
 
-    summary = {}
-    for r in records:
-        cat = r.get("category", "unknown")
-        if cat not in summary:
-            summary[cat] = {
-                "category":      cat,
-                "item_count":    0,
-                "avg_price":     0,
-                "rising":        0,
-                "falling":       0,
-                "stable":        0,
-                "avg_change_pct": 0,
-                "change_count":  0,
+    # Today
+    today_rows = _query("""
+        SELECT i.name_english, i.name_urdu, i.category, i.unit,
+               r.avg_price, r.price_change_pct, r.direction
+        FROM price_readings r
+        JOIN items i ON r.item_id = i.id
+        WHERE CAST(r.date AS DATE) = CURRENT_DATE
+        ORDER BY r.price_change_pct DESC NULLS LAST
+    """)
+
+    if not today_rows:
+        raise HTTPException(status_code=404, detail="No data for today")
+
+    # 30-day baseline avg per category
+    baseline_rows = _query("""
+        SELECT i.category, AVG(r.avg_price) as baseline
+        FROM price_readings r
+        JOIN items i ON r.item_id = i.id
+        WHERE CAST(r.date AS DATE) BETWEEN CURRENT_DATE - INTERVAL '35 days'
+                                       AND CURRENT_DATE - INTERVAL '5 days'
+        GROUP BY i.category
+    """)
+    baseline = {row[0]: float(row[1]) for row in baseline_rows}
+
+    # Category stats
+    cat_stats = defaultdict(lambda: {
+        "item_count": 0, "avg_price": 0,
+        "rising": 0, "falling": 0, "stable": 0,
+        "total_change": 0, "change_count": 0,
+    })
+    top_gainers, top_losers = [], []
+
+    for row in today_rows:
+        name_en, name_ur, cat, unit, avg, chg_pct, direction = row
+        s = cat_stats[cat]
+        s["item_count"] += 1
+        s["avg_price"]  += float(avg or 0)
+        s[direction or "stable"] += 1
+        if chg_pct is not None:
+            s["total_change"]  += float(chg_pct)
+            s["change_count"]  += 1
+            item = {
+                "name_english": name_en, "name_urdu": name_ur or "",
+                "category": cat, "unit": unit,
+                "avg_price": float(avg), "price_change_pct": float(chg_pct),
+                "direction": direction or "stable",
             }
-        s = summary[cat]
-        s["item_count"]  += 1
-        s["avg_price"]   += r.get("avg_price", (r.get("min_price",0) + r.get("max_price",0)) / 2)
-        dir_ = r.get("direction", "stable")
-        s[dir_] = s.get(dir_, 0) + 1
-        if r.get("price_change_pct") is not None:
-            s["avg_change_pct"] += r["price_change_pct"]
-            s["change_count"]   += 1
+            if float(chg_pct) > 0:
+                top_gainers.append(item)
+            elif float(chg_pct) < 0:
+                top_losers.append(item)
 
-    result = []
-    for cat, s in summary.items():
-        if s["item_count"] > 0:
-            s["avg_price"]     = round(s["avg_price"] / s["item_count"], 2)
-        if s["change_count"] > 0:
-            s["avg_change_pct"] = round(s["avg_change_pct"] / s["change_count"], 2)
-        del s["change_count"]
-        # Inflation signal
-        pct = s["avg_change_pct"]
-        if pct > 3:     s["signal"] = "inflationary"
-        elif pct < -3:  s["signal"] = "deflationary"
-        else:           s["signal"] = "stable"
-        result.append(s)
+    top_gainers.sort(key=lambda x: x["price_change_pct"], reverse=True)
+    top_losers.sort(key=lambda x: x["price_change_pct"])
 
-    # Overall market signal
-    all_changes = [r.get("price_change_pct") for r in records if r.get("price_change_pct") is not None]
-    overall_change = round(sum(all_changes) / len(all_changes), 2) if all_changes else 0
-
-    return {
-        "date":           records[0].get("date") if records else None,
-        "overall_change_pct": overall_change,
-        "market_signal":  "inflationary" if overall_change > 2 else "deflationary" if overall_change < -2 else "stable",
-        "categories":     result,
-        "ml_status":      "rule_based",
-        "ml_note":        "ML forecasting available after 90 days of data collection",
-    }
-
-
-@router.get("/anomalies")
-async def get_anomalies(request: Request, threshold: float = Query(10.0, description="% change threshold to flag as anomaly")):
-    """
-    Detect unusual price movements.
-    Phase 1: threshold-based. Phase 2: statistical Z-score anomaly detection.
-    """
-    records = load_data()
-    anomalies = []
-    for r in records:
-        pct = r.get("price_change_pct")
-        if pct is not None and abs(pct) >= threshold:
-            anomalies.append({
-                "name_english":     r.get("name_english"),
-                "name_urdu":        r.get("name_urdu", ""),
-                "category":         r.get("category"),
-                "avg_price":        r.get("avg_price"),
-                "price_change_pct": pct,
-                "direction":        r.get("direction"),
-                "severity":         "high" if abs(pct) >= 20 else "medium",
-                "unit":             r.get("unit"),
-            })
-
-    anomalies.sort(key=lambda x: abs(x["price_change_pct"]), reverse=True)
-
-    return {
-        "date":       records[0].get("date") if records else None,
-        "threshold":  threshold,
-        "count":      len(anomalies),
-        "anomalies":  anomalies,
-        "ml_status":  "threshold_based",
-        "ml_note":    "Z-score anomaly detection available after 30 days of data",
-    }
-
-
-@router.get("/forecast/{slug}")
-async def get_forecast(request: Request, slug: str):
-    """
-    Price forecast for a single item.
-    Phase 1: linear trend extrapolation from available data.
-    Phase 2: Prophet/LSTM forecast with confidence intervals.
-    """
-    history = load_history(days=30)
-    item_history = [r for r in history if r.get("name_english", "").lower().replace(" ", "-") == slug or r.get("slug") == slug]
-
-    if not item_history:
-        # Return today's price as baseline
-        today = load_data()
-        match = next((r for r in today if r.get("name_english","").lower().replace(" ","-") == slug), None)
-        if not match:
-            raise HTTPException(status_code=404, detail=f"Item '{slug}' not found")
-        item_history = [match]
-
-    # Sort by date
-    item_history.sort(key=lambda x: x.get("date", ""))
-
-    # Get prices
-    prices = [r.get("avg_price", (r.get("min_price",0)+r.get("max_price",0))/2) for r in item_history]
-    latest = prices[-1] if prices else 0
-    name   = item_history[-1].get("name_english", slug)
-
-    # Simple linear trend
-    if len(prices) >= 2:
-        avg_daily_change = (prices[-1] - prices[0]) / len(prices)
-    elif item_history[-1].get("price_change_pct"):
-        avg_daily_change = latest * item_history[-1]["price_change_pct"] / 100
-    else:
-        avg_daily_change = 0
-
-    # 7-day forecast
-    forecast = []
-    for i in range(1, 8):
-        date = (datetime.now(timezone.utc) + timedelta(days=i)).strftime("%Y-%m-%d")
-        predicted = round(max(0, latest + avg_daily_change * i), 2)
-        # Simple confidence band (widens over time)
-        margin = round(predicted * 0.05 * i, 2)
-        forecast.append({
-            "date":       date,
-            "predicted":  predicted,
-            "lower":      round(predicted - margin, 2),
-            "upper":      round(predicted + margin, 2),
-            "confidence": max(0.5, 0.95 - i * 0.05),
+    categories = []
+    for cat, s in cat_stats.items():
+        avg_chg = round(s["total_change"] / s["change_count"], 2) if s["change_count"] else 0
+        avg_p   = round(s["avg_price"] / s["item_count"], 2) if s["item_count"] else 0
+        base    = baseline.get(cat)
+        vs_baseline = round((avg_p - base) / base * 100, 2) if base and base > 0 else None
+        categories.append({
+            "category":        cat,
+            "item_count":      s["item_count"],
+            "avg_price":       avg_p,
+            "avg_change_pct":  avg_chg,
+            "vs_30d_baseline": vs_baseline,
+            "rising":          s["rising"],
+            "falling":         s["falling"],
+            "stable":          s["stable"],
+            "signal": "inflationary" if avg_chg > 3 else "deflationary" if avg_chg < -3 else "stable",
         })
 
+    all_changes = [float(r[5]) for r in today_rows if r[5] is not None]
+    overall_chg = round(_mean(all_changes), 2) if all_changes else 0
+
     return {
-        "slug":          slug,
-        "name_english":  name,
-        "current_price": latest,
-        "data_points":   len(prices),
-        "forecast":      forecast,
-        "ml_status":     "linear_extrapolation" if len(prices) >= 2 else "insufficient_data",
-        "ml_note":       "Prophet/LSTM forecasting available after 90 days of data. Currently using linear trend.",
+        "date":             datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "total_items":      len(today_rows),
+        "overall_change_pct": overall_chg,
+        "market_signal":    "inflationary" if overall_chg > 2 else "deflationary" if overall_chg < -2 else "stable",
+        "categories":       categories,
+        "top_gainers":      top_gainers[:5],
+        "top_losers":       top_losers[:5],
+        "ml_status":        "statistical_ml",
     }
 
 
+# ── /analytics/inflation-index ────────────────────────────────────────────────
+
 @router.get("/inflation-index")
-async def get_inflation_index(request: Request):
+async def get_inflation_index(
+    request: Request,
+    days: int = Query(90, ge=14, le=180),
+):
     """
-    Lahore market inflation index.
-    Tracks overall price level changes over time.
+    Lahore market inflation index — daily average price level indexed to
+    the first available day in the window.
     """
-    history = load_history(days=30)
-    today   = load_data()
+    _db()
 
-    if not today:
-        raise HTTPException(status_code=404, detail="No data available")
+    rows = _query("""
+        SELECT CAST(r.date AS DATE) as d, AVG(r.avg_price) as avg_p, COUNT(*) as n
+        FROM price_readings r
+        WHERE CAST(r.date AS DATE) >= CURRENT_DATE - INTERVAL '1 day' * :days
+        GROUP BY d
+        ORDER BY d ASC
+    """, {"days": days})
 
-    # Group by date
-    from collections import defaultdict
-    by_date = defaultdict(list)
-    for r in history:
-        d = r.get("date")
-        if d:
-            by_date[d].append(r.get("avg_price", (r.get("min_price",0)+r.get("max_price",0))/2))
+    if not rows:
+        raise HTTPException(status_code=404, detail="No historical data")
 
-    # Compute daily average
-    daily_avg = []
-    for date in sorted(by_date.keys()):
-        prices = by_date[date]
-        daily_avg.append({"date": date, "avg_price": round(sum(prices)/len(prices), 2)})
+    series = [{"date": str(r[0]), "avg_price": round(float(r[1]), 2), "items": int(r[2])} for r in rows]
+    baseline = series[0]["avg_price"]
 
-    # Compute change vs first available day
-    baseline = daily_avg[0]["avg_price"] if daily_avg else None
-    for d in daily_avg:
-        if baseline and baseline > 0:
-            d["index"] = round((d["avg_price"] / baseline) * 100, 2)
-        else:
-            d["index"] = 100.0
+    for s in series:
+        s["index"] = round(s["avg_price"] / baseline * 100, 2) if baseline > 0 else 100.0
 
-    # Today's overall stats
-    all_changes = [r.get("price_change_pct") for r in today if r.get("price_change_pct") is not None]
-    today_change = round(sum(all_changes)/len(all_changes), 2) if all_changes else 0
+    current_index = series[-1]["index"] if series else 100.0
+    change_vs_baseline = round(current_index - 100.0, 2)
 
     return {
-        "date":          today[0].get("date") if today else None,
-        "today_change":  today_change,
-        "baseline_date": daily_avg[0]["date"] if daily_avg else None,
-        "history":       daily_avg,
-        "total_items":   len(today),
-        "ml_status":     "statistical",
+        "baseline_date":      series[0]["date"] if series else None,
+        "current_date":       series[-1]["date"] if series else None,
+        "baseline_price":     baseline,
+        "current_index":      current_index,
+        "change_vs_baseline": change_vs_baseline,
+        "signal":             "inflationary" if change_vs_baseline > 5 else "deflationary" if change_vs_baseline < -5 else "stable",
+        "days":               days,
+        "series":             series,
+        "ml_status":          "price_index",
     }
