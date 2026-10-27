@@ -526,9 +526,10 @@
     <div class="modal-body">
       <div class="modal-price-row" id="modal-prices"></div>
       <div class="modal-chart-wrap">
-        <div class="modal-chart-title">Price Trend (recent data)</div>
+        <div class="modal-chart-title" id="modal-chart-title">30-Day Price Trend · 7-day MA · Forecast</div>
         <canvas id="modal-chart" height="120"></canvas>
       </div>
+      <div id="modal-ml-insights"></div>
       <div class="modal-meta" id="modal-meta"></div>
     </div>
   </div>
@@ -975,34 +976,86 @@ function openModal(name) {
     <div class="modal-meta-item"><span class="lbl">Date: </span><span class="val">${d.date}</span></div>
     ${d.quality ? `<div class="modal-meta-item"><span class="lbl">Quality: </span><span class="val">Grade ${d.quality}</span></div>` : ''}`;
 
-  // Chart
+  // Show modal first with spinner, then load real trend data
+  document.getElementById('modal-overlay').classList.remove('hidden');
   if (modalChart) { modalChart.destroy(); modalChart = null; }
-  const today = d.avg_price;
-  const p = d.price_change_pct || 0;
-  const prev = today / (1 + p/100);
-  const data7 = [prev*0.97, prev*1.02, prev*0.98, prev*1.01, prev, prev*(1+p/200), today];
-  const labels = ['6d ago','5d ago','4d ago','3d ago','2d ago','Yesterday','Today'];
+
   const color = dir === 'up' ? '#00d68f' : dir === 'down' ? '#ff4d6a' : '#8899aa';
   const ctx = document.getElementById('modal-chart').getContext('2d');
-  modalChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [{
-        data: data7, borderColor: color, backgroundColor: color+'22',
-        borderWidth: 2, pointRadius: 3, pointBackgroundColor: color, tension: 0.4, fill: true
-      }]
-    },
-    options: {
-      responsive: true,
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => `Rs ${Math.round(ctx.raw)}` } } },
-      scales: {
-        x: { ticks: { color: '#445566', font: { size: 10 } }, grid: { color: '#1e2a35' } },
-        y: { ticks: { color: '#445566', font: { size: 10 }, callback: v => 'Rs '+Math.round(v) }, grid: { color: '#1e2a35' } }
+
+  // Fallback simulated while loading
+  function drawSimulated() {
+    const today = d.avg_price;
+    const p = d.price_change_pct || 0;
+    const prev = today / (1 + p/100);
+    const data7 = [prev*0.97, prev*1.02, prev*0.98, prev*1.01, prev, prev*(1+p/200), today];
+    const labels = ['6d','5d','4d','3d','2d','Yesterday','Today'];
+    if (modalChart) { modalChart.destroy(); modalChart = null; }
+    modalChart = new Chart(ctx, {
+      type:'line',
+      data:{ labels, datasets:[{ data:data7, borderColor:color, backgroundColor:color+'22', borderWidth:2, pointRadius:3, pointBackgroundColor:color, tension:0.4, fill:true, label:'Price (estimated)' }] },
+      options:{ responsive:true, plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label: c=>`Rs ${Math.round(c.raw)}` } } }, scales:{ x:{ ticks:{ color:'#445566',font:{size:10} },grid:{color:'#1e2a35'} }, y:{ ticks:{ color:'#445566',font:{size:10},callback:v=>'Rs '+Math.round(v) },grid:{color:'#1e2a35'} } } }
+    });
+  }
+  drawSimulated();
+
+  // Fetch real 30-day ML trend from backend
+  fetch(`${BASE}/analytics/trends/${d.slug}?days=30`, { signal: AbortSignal.timeout(10000) })
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      if (!data || !data.series || data.series.length < 3) return;
+      const series = data.series;
+      const labels = series.map(s => s.date.slice(5));
+      const prices = series.map(s => s.avg_price);
+      const maData = series.map(s => s.moving_avg_7d);
+      if (modalChart) { modalChart.destroy(); modalChart = null; }
+      const datasets = [
+        { label:'Avg Price', data:prices, borderColor:color, backgroundColor:color+'15', borderWidth:2, pointRadius:2, pointBackgroundColor:color, tension:0.3, fill:true },
+        { label:'7-day MA', data:maData, borderColor:'#ffb340', backgroundColor:'transparent', borderWidth:1.5, pointRadius:0, tension:0.4, fill:false, borderDash:[4,3] },
+      ];
+      // Add anomaly dots if available
+      const anomalyPoints = series.map(s => s.is_anomaly ? s.avg_price : null);
+      if (anomalyPoints.some(v=>v!==null)) {
+        datasets.push({ label:'⚡ Anomaly', data:anomalyPoints, borderColor:'#ff4d6a', backgroundColor:'#ff4d6a', pointRadius:6, pointStyle:'circle', showLine:false });
       }
-    }
-  });
-  document.getElementById('modal-overlay').classList.remove('hidden');
+      // Forecast line
+      if (data.forecast_next_day != null) {
+        const fcLabels = [...labels, 'Tomorrow'];
+        const fcPrices = [...prices, data.forecast_next_day];
+        datasets.push({ label:'Forecast', data:[...Array(prices.length-1).fill(null), prices[prices.length-1], data.forecast_next_day], borderColor:'#a78bfa', backgroundColor:'transparent', borderWidth:1.5, pointRadius:4, borderDash:[6,3], tension:0 });
+        modalChart = new Chart(ctx, {
+          type:'line', data:{ labels:fcLabels, datasets },
+          options:{ responsive:true, plugins:{ legend:{ labels:{ color:'#8899aa',font:{size:10},boxWidth:12 } }, tooltip:{ mode:'index', intersect:false, callbacks:{ label: c=>`${c.dataset.label}: Rs ${Math.round(c.raw)}` } } }, scales:{ x:{ ticks:{ color:'#445566',font:{size:9},maxTicksLimit:10 },grid:{color:'#1e2a35'} }, y:{ ticks:{ color:'#445566',font:{size:10},callback:v=>'Rs '+Math.round(v) },grid:{color:'#1e2a35'} } } }
+        });
+        return;
+      }
+      modalChart = new Chart(ctx, {
+        type:'line', data:{ labels, datasets },
+        options:{ responsive:true, plugins:{ legend:{ labels:{ color:'#8899aa',font:{size:10},boxWidth:12 } }, tooltip:{ mode:'index', intersect:false, callbacks:{ label: c=>`${c.dataset.label}: Rs ${Math.round(c.raw)}` } } }, scales:{ x:{ ticks:{ color:'#445566',font:{size:9},maxTicksLimit:10 },grid:{color:'#1e2a35'} }, y:{ ticks:{ color:'#445566',font:{size:10},callback:v=>'Rs '+Math.round(v) },grid:{color:'#1e2a35'} } } }
+      });
+      // Add ML insights below chart
+      const mlEl = document.getElementById('modal-ml-insights');
+      if (mlEl) {
+        const trend = data.trend_direction || 'stable';
+        const trendColor = trend==='rising'?'var(--green)':trend==='falling'?'var(--red)':'var(--text3)';
+        const zScore = data.current_z_score != null ? data.current_z_score.toFixed(2) : '—';
+        const anomalyFlag = Math.abs(data.current_z_score||0) > 1.5;
+        mlEl.innerHTML = `
+          <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;padding:12px 0;border-top:1px solid var(--border)">
+            <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">ML Trend</div>
+              <div style="font-size:14px;font-weight:700;color:${trendColor}">${trend}</div></div>
+            <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Z-Score</div>
+              <div style="font-size:14px;font-weight:700;color:${anomalyFlag?'var(--amber)':'var(--text)'}">${zScore}${anomalyFlag?' ⚡':''}</div></div>
+            <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">7-day MA</div>
+              <div style="font-size:14px;font-weight:700">Rs ${data.moving_avg_7d!=null?Math.round(data.moving_avg_7d):'—'}</div></div>
+            <div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Tomorrow Forecast</div>
+              <div style="font-size:14px;font-weight:700;color:var(--purple)">Rs ${data.forecast_next_day!=null?Math.round(data.forecast_next_day):'—'}</div></div>
+            ${data.cheapest_day ? `<div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Cheapest Day</div>
+              <div style="font-size:14px;font-weight:700;color:var(--accent)">💰 ${data.cheapest_day}s</div></div>` : ''}
+          </div>`;
+      }
+    })
+    .catch(() => {}); // keep simulated on error
 }
 
 function closeModal(e) {
@@ -1076,7 +1129,7 @@ let _dowPatterns = {};  // slug -> cheapest_day
 async function fetchInsights() {
   try {
     const [anomRes, sumRes, dowRes] = await Promise.all([
-      fetch(`${BASE}/analytics/anomalies?days=30&z_threshold=2.0`, { signal: AbortSignal.timeout(12000) }),
+      fetch(`${BASE}/analytics/anomalies?days=60&z_threshold=1.5`, { signal: AbortSignal.timeout(12000) }),
       fetch(`${BASE}/analytics/summary`, { signal: AbortSignal.timeout(12000) }),
       fetch(`${BASE}/analytics/dow-patterns`, { signal: AbortSignal.timeout(12000) }),
     ]);
