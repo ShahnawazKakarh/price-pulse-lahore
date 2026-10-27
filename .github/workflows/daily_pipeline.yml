@@ -9,7 +9,7 @@ on:
 jobs:
   scrape-and-ocr:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repo
@@ -50,6 +50,21 @@ jobs:
           except Exception as e:
               print(f"❌ DB connection failed: {e}")
               sys.exit(1)
+          EOF
+
+      - name: Init DB tables (idempotent)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          python3 - << 'EOF'
+          import sys
+          sys.path.insert(0, '.')
+          from db.database import init_db, check_connection
+          if check_connection():
+              init_db()
+              print("✅ DB tables initialised (including processed_images)")
+          else:
+              print("⚠️ DB not reachable — skipping init")
           EOF
 
       - name: Run pipeline

@@ -121,3 +121,24 @@ class ScrapeLog(Base):
 
     def __repr__(self):
         return f"<ScrapeLog {self.run_at} status={self.status} records={self.records_extracted}>"
+
+
+# ── Table 4: processed_images ──────────────────────────────────────────────────
+# Tracks which images have been OCR'd. Replaces ephemeral .processed marker
+# files so GitHub Actions (ephemeral filesystem) doesn't reprocess images.
+class ProcessedImage(Base):
+    __tablename__ = "processed_images"
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    image_hash   = Column(String(64), unique=True, nullable=False)   # SHA-256 hex
+    filename     = Column(Text, nullable=True)
+    category     = Column(String(50), nullable=True)
+    source_url   = Column(Text, nullable=True)
+    processed_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        Index("ix_processed_images_hash", "image_hash"),
+    )
+
+    def __repr__(self):
+        return f"<ProcessedImage hash={self.image_hash[:8]}… category={self.category}>"

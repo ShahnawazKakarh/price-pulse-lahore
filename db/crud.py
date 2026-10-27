@@ -14,7 +14,7 @@ from rapidfuzz import fuzz, process
 from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 
-from db.models import Item, PriceReading, ScrapeLog
+from db.models import Item, PriceReading, ScrapeLog, ProcessedImage
 
 logger = logging.getLogger(__name__)
 
@@ -305,3 +305,23 @@ def get_item_history(db: Session, slug: str, days: int = 30) -> list[dict]:
         }
         for r in readings
     ]
+
+
+# ── Processed image hash tracking (replaces ephemeral .processed files) ────────
+
+def is_image_processed(db: Session, image_hash: str) -> bool:
+    """Return True if this image hash is already in the DB."""
+    return db.query(ProcessedImage).filter(ProcessedImage.image_hash == image_hash).first() is not None
+
+
+def mark_image_processed(db: Session, image_hash: str, filename: str = "", category: str = "", source_url: str = "") -> None:
+    """Record that an image has been successfully OCR'd."""
+    if not is_image_processed(db, image_hash):
+        record = ProcessedImage(
+            image_hash=image_hash,
+            filename=filename,
+            category=category,
+            source_url=source_url,
+        )
+        db.add(record)
+        db.commit()

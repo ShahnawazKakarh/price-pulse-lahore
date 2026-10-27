@@ -50,6 +50,9 @@ HEADERS = {
     "Referer": BASE_URL,
 }
 
+# DB-based hash tracking — set by pipeline.py before calling run_scraper()
+_db_session = None  # type: ignore
+
 IMAGE_DIR = Path(__file__).parent.parent / "data" / "images"
 IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -59,11 +62,26 @@ def _hash_file(content: bytes) -> str:
 
 
 def _already_downloaded(image_hash: str) -> bool:
+    """Check DB first (survives ephemeral runners), then local marker files."""
+    if _db_session is not None:
+        try:
+            from db.crud import is_image_processed
+            if is_image_processed(_db_session, image_hash):
+                return True
+        except Exception:
+            pass
     marker = IMAGE_DIR / f"{image_hash}.processed"
     return marker.exists()
 
 
-def _mark_downloaded(image_hash: str) -> None:
+def _mark_downloaded(image_hash: str, filename: str = "", category: str = "", source_url: str = "") -> None:
+    """Write to DB (if available) and local marker file."""
+    if _db_session is not None:
+        try:
+            from db.crud import mark_image_processed
+            mark_image_processed(_db_session, image_hash, filename=filename, category=category, source_url=source_url)
+        except Exception as e:
+            logger.warning(f"Could not write image hash to DB: {e}")
     marker = IMAGE_DIR / f"{image_hash}.processed"
     marker.touch()
 
@@ -184,7 +202,7 @@ def download_image(url: str, category: str) -> tuple[bytes, str, str] | None:
             safe_name = re.sub(r'[^\w\-.]', '_', filename)[:50]
             local_path = IMAGE_DIR / f"{date_str}_{category}_{image_hash[:8]}_{safe_name}.jpg"
             local_path.write_bytes(content)
-            _mark_downloaded(image_hash)
+            _mark_downloaded(image_hash, filename=filename, category=category, source_url=url)
 
             logger.info(f"[{category}] Downloaded → {local_path.name} (filename: {filename})")
             return content, str(local_path), filename

@@ -97,7 +97,27 @@ def run_pipeline():
         logger.warning("Database unavailable — will save to JSON fallback only")
 
     # ── Step 2: Scrape all images ─────────────────────────────────────────────
+    # Inject DB session into scraper so it can track processed image hashes
+    # This survives GitHub Actions ephemeral filesystem between runs
+    if db_available:
+        try:
+            import scraper.scraper as _scraper_mod
+            from db.database import SessionLocal
+            _scraper_mod._db_session = SessionLocal()
+            logger.info("DB hash tracking enabled for scraper")
+        except Exception as e:
+            logger.warning(f"Could not inject DB session into scraper: {e}")
+
     scraped_images, scrape_failures = run_scraper()
+
+    # Close the injected scraper DB session
+    try:
+        import scraper.scraper as _scraper_mod
+        if _scraper_mod._db_session is not None:
+            _scraper_mod._db_session.close()
+            _scraper_mod._db_session = None
+    except Exception:
+        pass
 
     if scrape_failures:
         alert_scrape_failure(scrape_failures)
