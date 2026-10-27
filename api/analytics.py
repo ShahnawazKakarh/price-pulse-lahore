@@ -74,7 +74,7 @@ async def get_anomalies(
                CAST(r.date AS DATE) as d
         FROM price_readings r
         JOIN items i ON r.item_id = i.id
-        WHERE CAST(r.date AS DATE) = :latest
+        WHERE CAST(r.date AS DATE) = CAST(:latest AS DATE)
     """, {"latest": str(latest_date)})
 
     if not today_rows:
@@ -85,8 +85,8 @@ async def get_anomalies(
         SELECT i.slug, r.avg_price, CAST(r.date AS DATE) as d
         FROM price_readings r
         JOIN items i ON r.item_id = i.id
-        WHERE CAST(r.date AS DATE) >= :latest - INTERVAL '1 day' * :days
-          AND CAST(r.date AS DATE) < :latest
+        WHERE CAST(r.date AS DATE) >= CAST(:latest AS DATE) - INTERVAL '1 day' * :days
+          AND CAST(r.date AS DATE) < CAST(:latest AS DATE)
         ORDER BY i.slug, d
     """, {"days": days, "latest": str(latest_date)})
 
@@ -339,7 +339,7 @@ async def get_summary(request: Request):
                r.avg_price, r.price_change_pct, r.direction
         FROM price_readings r
         JOIN items i ON r.item_id = i.id
-        WHERE CAST(r.date AS DATE) = :latest
+        WHERE CAST(r.date AS DATE) = CAST(:latest AS DATE)
         ORDER BY r.price_change_pct DESC NULLS LAST
     """, {"latest": str(latest_date)})
 
@@ -351,8 +351,8 @@ async def get_summary(request: Request):
         SELECT i.category, AVG(r.avg_price) as baseline
         FROM price_readings r
         JOIN items i ON r.item_id = i.id
-        WHERE CAST(r.date AS DATE) BETWEEN :latest - INTERVAL '35 days'
-                                       AND :latest - INTERVAL '5 days'
+        WHERE CAST(r.date AS DATE) BETWEEN CAST(:latest AS DATE) - INTERVAL '35 days'
+                                       AND CAST(:latest AS DATE) - INTERVAL '5 days'
         GROUP BY i.category
     """, {"latest": str(latest_date)})
     baseline = {row[0]: float(row[1]) for row in baseline_rows}
