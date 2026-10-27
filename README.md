@@ -41,16 +41,22 @@ People of Lahore can check today's prices, see what went up or down, search item
 
 **UI** — [shahnawazkakarh.github.io/price-pulse-lahore](https://shahnawazkakarh.github.io/price-pulse-lahore)
 - Live scrolling price ticker
-- Category summary cards with inflation signal
-- Sortable, filterable price table with 7-day sparklines
-- Click any item → detail modal with price chart
-- 🛒 Basket calculator — select items, see total cost
-- 🔥 Alert banner — biggest mover of the day
+- Category summary cards with expandable movers
+- Weekly market digest banner
+- Sortable, filterable price table with 7-day sparklines and cheapest-day chip
+- Price range slider + zero-price filter
+- ⭐ Favourites — star items and filter to favourites only
+- 🔀 Compare overlay — select 2–3 items for side-by-side bar chart
+- 🛒 Basket calculator with cost history chart
+- Click any item → modal with real 30-day chart, 7-day MA, anomaly dots, forecast line, ML stats panel
+- 🔔 Price alerts — set email + threshold, stored locally
+- 📈 Extended forecast chart with 95% confidence bands
+- 🔗 Correlation heatmap by category
 - اردو Urdu / English bilingual toggle (RTL support)
 - Top gainers & losers section
 
 **API** — [price-pulse-lahore.vercel.app/docs](https://price-pulse-lahore.vercel.app/docs)
-- 12 REST endpoints with rate limiting and CORS
+- 17 REST endpoints with rate limiting and CORS
 - Analytics: anomaly detection, inflation index, price forecasting
 
 **Automation**
@@ -59,12 +65,12 @@ People of Lahore can check today's prices, see what went up or down, search item
 
 ### 🤖 ML Roadmap
 
-| Phase | Timeline | Feature | Method |
+| Phase | Status | Features | Method |
 |---|---|---|---|
 | **Phase 1** | ✅ Live | Anomaly detection, inflation index, linear forecast | Rule-based + statistics |
-| **Phase 2** | 30 days data | Z-score anomalies, day-of-week patterns, moving averages | Statistical models |
-| **Phase 3** | 90 days data | Price forecasting with confidence bands, seasonal decomposition | Meta Prophet |
-| **Phase 4** | 6 months data | LSTM predictions, Ramadan price tracker, correlation matrix | TensorFlow / PyTorch |
+| **Phase 2** | ✅ Live | Z-score anomalies, day-of-week patterns, 7-day MA, price alerts | Statistical models |
+| **Phase 3** | ✅ Live | Forecast with confidence bands, seasonal decomposition, correlation matrix | Linear regression + seasonal correction |
+| **Phase 4** | 6 months data | LSTM predictions, Ramadan tracker, ensemble models | TensorFlow / PyTorch |
 
 > Data collection started May 2026. ML models activate automatically as historical data grows.
 
@@ -171,12 +177,17 @@ find data/images/ -name "*.processed" -delete && python scraper/pipeline.py
 
 ### Analytics & ML
 
-| Endpoint | Description | Phase |
-|---|---|---|
-| `GET /analytics/summary` | Market inflation signal per category | Status: ✅ Live |
-| `GET /analytics/anomalies` | Items with unusual price movements | Status: ✅ Live |
-| `GET /analytics/forecast/{slug}` | 7-day price forecast | Status: ✅ Live |
-| `GET /analytics/inflation-index` | Lahore market price index over time | Status: ✅ Live |
+| Endpoint | Description |
+|---|---|
+| `GET /analytics/summary` | Market inflation signal per category |
+| `GET /analytics/anomalies?days=60&z_threshold=1.5` | Z-score anomaly detection |
+| `GET /analytics/trends/{slug}` | 30-day price history, 7-day MA, forecast |
+| `GET /analytics/inflation-index` | Lahore market price index over time |
+| `GET /analytics/dow-patterns` | Cheapest day of week per item |
+| `GET /analytics/forecast/{slug}` | 14-day forecast with 95% confidence bands |
+| `GET /analytics/seasonal/{slug}` | Seasonal decomposition (trend + weekly + residual) |
+| `GET /analytics/correlations?category=X` | Pearson correlation matrix within a category |
+| `POST /alerts` | Set a price alert (email + item + threshold) |
 
 Full interactive docs at [price-pulse-lahore.vercel.app/docs](https://price-pulse-lahore.vercel.app/docs)
 
