@@ -75,6 +75,7 @@ async def get_anomalies(
         FROM price_readings r
         JOIN items i ON r.item_id = i.id
         WHERE CAST(r.date AS DATE) = CAST(:latest AS DATE)
+          AND r.avg_price > 0
     """, {"latest": str(latest_date)})
 
     if not today_rows:
@@ -87,6 +88,7 @@ async def get_anomalies(
         JOIN items i ON r.item_id = i.id
         WHERE CAST(r.date AS DATE) >= CAST(:latest AS DATE) - INTERVAL '1 day' * :days
           AND CAST(r.date AS DATE) < CAST(:latest AS DATE)
+          AND r.avg_price > 0
         ORDER BY i.slug, d
     """, {"days": days, "latest": str(latest_date)})
 
@@ -157,6 +159,7 @@ async def get_trends(
         JOIN items i ON r.item_id = i.id
         WHERE i.slug = :slug
           AND CAST(r.date AS DATE) >= CURRENT_DATE - INTERVAL '1 day' * :days
+          AND r.avg_price > 0
         ORDER BY d ASC
     """, {"slug": slug, "days": days})
 
@@ -340,6 +343,7 @@ async def get_summary(request: Request):
         FROM price_readings r
         JOIN items i ON r.item_id = i.id
         WHERE CAST(r.date AS DATE) = CAST(:latest AS DATE)
+          AND r.avg_price > 0
         ORDER BY r.price_change_pct DESC NULLS LAST
     """, {"latest": str(latest_date)})
 
@@ -438,6 +442,7 @@ async def get_inflation_index(
         SELECT CAST(r.date AS DATE) as d, AVG(r.avg_price) as avg_p, COUNT(*) as n
         FROM price_readings r
         WHERE CAST(r.date AS DATE) >= CURRENT_DATE - INTERVAL '1 day' * :days
+          AND r.avg_price > 0
         GROUP BY d
         ORDER BY d ASC
     """, {"days": days})
