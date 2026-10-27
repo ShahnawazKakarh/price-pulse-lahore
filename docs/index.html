@@ -182,7 +182,19 @@
     .basket-item-name { font-size: 13px; font-weight: 500; color: var(--text); flex: 1; }
     .basket-item-price { font-family: var(--font-m); font-size: 12px; color: var(--text2); }
     .basket-summary { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; gap: 20px; flex-wrap: wrap; }
-    .insights-section { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 0 32px 48px; }
+    .weekly-digest {
+  display: none;
+  background: linear-gradient(135deg, rgba(0,200,130,0.08), rgba(0,120,255,0.06));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+.weekly-digest strong { color: var(--text); }
+.insights-section { position: relative; z-index: 1; max-width: 1400px; margin: 0 auto; padding: 0 32px 48px; }
     .insights-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     .insights-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
     .insights-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
@@ -416,7 +428,8 @@
 </div>
 
 <!-- ML Insights Section -->
-<div class="section-title">Market Insights</div>
+<div id="weekly-digest" class="weekly-digest"></div>
+<div class="section-title" style="margin-top:16px">Market Insights</div>
 <div class="insights-section">
   <div class="insights-grid">
     <div class="insights-card">
@@ -550,8 +563,10 @@ async function fetchDataForDate(date) {
       ...d, avg_price: d.avg_price || (d.min_price + d.max_price) / 2,
     }));
     const isToday = currentDateIndex === 0;
+    const validCount = allData.filter(d => d.avg_price > 0).length;
+    const now = new Date().toLocaleTimeString('en-PK', {hour:'2-digit',minute:'2-digit'});
     document.getElementById('last-updated').textContent =
-      isToday ? `Live · auto-refreshes every 30 min` : `Historical data`;
+      isToday ? `Live · ${validCount} items · updated ${now}` : `Historical data · ${date} · ${validCount} items`;
     renderAll();
   } catch (err) {
     // Only use fallback if no real data loaded yet
@@ -677,7 +692,7 @@ function renderTicker() {
 
 // ── Filter + Sort ─────────────────────────────────────────────────────────────
 function getFiltered() {
-  let data = [...allData];
+  let data = allData.filter(d => d.avg_price > 0);
   if (activeTab !== 'all') data = data.filter(d => d.category === activeTab);
   if (activeDirs.size > 0) data = data.filter(d => activeDirs.has(d.direction || 'stable'));
   const q = searchQ.toLowerCase().trim();
@@ -731,6 +746,7 @@ function renderTable() {
       <td>
         <div class="item-name-en">${d.name_english}</div>
         ${d.name_urdu ? `<span class="item-name-ur">${d.name_urdu}</span>` : ''}
+        ${_dowPatterns[d.slug] ? `<span style="display:inline-block;margin-top:3px;font-size:10px;background:rgba(0,200,130,0.1);color:var(--green);border-radius:4px;padding:1px 6px">💰 cheapest ${_dowPatterns[d.slug]}s</span>` : ''}
       </td>
       <td><span class="cat-badge ${d.category}">${(CAT_META[d.category]||{}).emoji||''} ${d.category.replace(/_/g,' ')}</span></td>
       <td>
@@ -766,7 +782,7 @@ function renderTable() {
 
 // ── Movers ────────────────────────────────────────────────────────────────────
 function renderMovers() {
-  const w = allData.filter(d => d.price_change_pct != null);
+  const w = allData.filter(d => d.price_change_pct != null && d.avg_price > 0);
   const gainers = [...w].sort((a,b) => b.price_change_pct - a.price_change_pct).slice(0,5);
   const losers  = [...w].sort((a,b) => a.price_change_pct - b.price_change_pct).slice(0,5);
   const row = (d, dir) => {
@@ -789,7 +805,7 @@ let basket = new Set();
 function renderBasket() {
   const grid = document.getElementById('basket-grid');
   if (!allData.length) return;
-  grid.innerHTML = allData.map(d => `
+  grid.innerHTML = allData.filter(d => d.avg_price > 0).map(d => `
     <label class="basket-item">
       <input type="checkbox" ${basket.has(d.name_english) ? 'checked' : ''} onchange="toggleBasket('${d.name_english.replace(/'/g,"\\'")}')">
       <div style="flex:1">
@@ -941,11 +957,14 @@ const FALLBACK_DATA = {"date":"2026-05-30","data":[
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 // ── ML Insights ───────────────────────────────────────────────────────────────
+let _dowPatterns = {};  // slug -> cheapest_day
+
 async function fetchInsights() {
   try {
-    const [anomRes, sumRes] = await Promise.all([
+    const [anomRes, sumRes, dowRes] = await Promise.all([
       fetch(`${BASE}/analytics/anomalies?days=30&z_threshold=2.0`, { signal: AbortSignal.timeout(12000) }),
       fetch(`${BASE}/analytics/summary`, { signal: AbortSignal.timeout(12000) }),
+      fetch(`${BASE}/analytics/dow-patterns`, { signal: AbortSignal.timeout(12000) }),
     ]);
 
     if (anomRes.ok) {
@@ -960,11 +979,36 @@ async function fetchInsights() {
     if (sumRes.ok) {
       const data = await sumRes.json();
       renderCatSignals(data.categories || []);
+      renderWeeklyDigest(data);
+    }
+    if (dowRes && dowRes.ok) {
+      const data = await dowRes.json();
+      _dowPatterns = {};
+      (data.categories || []).forEach(cat => {
+        (cat.items || []).forEach(item => {
+          if (item.variation_pct > 2) _dowPatterns[item.slug] = item.cheapest_day;
+        });
+      });
     }
   } catch(e) {
     document.getElementById('anomaly-list').innerHTML = '<div class="state-wrap" style="padding:20px;font-size:12px;color:var(--text3)">Analytics unavailable</div>';
     document.getElementById('cat-signals').innerHTML  = '<div class="state-wrap" style="padding:20px;font-size:12px;color:var(--text3)">Analytics unavailable</div>';
   }
+}
+
+function renderWeeklyDigest(summary) {
+  const el = document.getElementById('weekly-digest');
+  if (!el || !summary) return;
+  const cats = (summary.categories || []).sort((a,b) => Math.abs(b.avg_change_pct)-Math.abs(a.avg_change_pct));
+  if (!cats.length) return;
+  const top = cats[0];
+  const topMeta = CAT_META[top.category] || {emoji:'📦', label: top.category};
+  const signal = summary.market_signal || 'stable';
+  const signalText = signal === 'inflationary' ? '📈 Market trending up' : signal === 'deflationary' ? '📉 Market trending down' : '📊 Market stable';
+  const overall = summary.overall_change_pct;
+  const sign = overall > 0 ? '+' : '';
+  el.innerHTML = `${signalText} · Overall avg change: <strong>${sign}${overall.toFixed(1)}%</strong> · Biggest mover: <strong>${topMeta.emoji} ${topMeta.label} ${top.avg_change_pct > 0 ? '+' : ''}${top.avg_change_pct.toFixed(1)}%</strong>`;
+  el.style.display = 'block';
 }
 
 function renderAnomalies(list) {
@@ -991,26 +1035,77 @@ function renderAnomalies(list) {
   }).join('');
 }
 
+let _summaryData = null;
+
 function renderCatSignals(cats) {
+  _summaryData = cats;
   const el = document.getElementById('cat-signals');
   if (!cats.length) { el.innerHTML = '<div class="state-wrap" style="padding:20px;font-size:12px">No data</div>'; return; }
   const sorted = [...cats].sort((a, b) => Math.abs(b.avg_change_pct) - Math.abs(a.avg_change_pct));
-  el.innerHTML = sorted.map(c => {
+  el.innerHTML = sorted.map((c, idx) => {
     const signal = c.signal || 'stable';
     const dotClass = signal === 'inflationary' ? 'dot-inflation' : signal === 'deflationary' ? 'dot-deflation' : 'dot-stable';
     const chg = c.avg_change_pct > 0 ? `<span style="color:var(--red)">+${c.avg_change_pct.toFixed(1)}%</span>` :
                 c.avg_change_pct < 0 ? `<span style="color:var(--green)">${c.avg_change_pct.toFixed(1)}%</span>` :
                 `<span style="color:var(--text3)">0%</span>`;
     const catMeta = CAT_META[c.category] || { emoji: '📦', label: c.category };
-    return `<div class="cat-signal-row">
-      <div style="display:flex;align-items:center;gap:10px">
-        <span class="signal-dot ${dotClass}"></span>
-        <span>${catMeta.emoji} ${catMeta.label}</span>
+    const vs30 = c.vs_30d_baseline != null
+      ? `<span style="font-size:10px;color:var(--text3)">vs 30d: ${c.vs_30d_baseline > 0 ? '+' : ''}${c.vs_30d_baseline.toFixed(1)}%</span>`
+      : '';
+    return `<div class="cat-signal-row" onclick="toggleCatExpand(${idx})" style="cursor:pointer;flex-direction:column;align-items:stretch;gap:0">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="signal-dot ${dotClass}"></span>
+          <span>${catMeta.emoji} ${catMeta.label}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          ${chg}
+          ${vs30}
+          <span style="font-size:11px;color:var(--text3)">${c.item_count} items</span>
+          <span style="font-size:10px;color:var(--text3)" id="cat-chevron-${idx}">▸</span>
+        </div>
       </div>
-      <div style="display:flex;align-items:center;gap:12px">
-        ${chg}
-        <span style="font-size:11px;color:var(--text3)">${c.item_count} items</span>
+      <div id="cat-expand-${idx}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+          <div style="text-align:center"><div style="font-size:16px;font-weight:700;color:var(--green)">${c.rising}</div><div style="font-size:10px;color:var(--text3)">Rising</div></div>
+          <div style="text-align:center"><div style="font-size:16px;font-weight:700;color:var(--red)">${c.falling}</div><div style="font-size:10px;color:var(--text3)">Falling</div></div>
+          <div style="text-align:center"><div style="font-size:16px;font-weight:700;color:var(--text3)">${c.stable}</div><div style="font-size:10px;color:var(--text3)">Stable</div></div>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Top movers in this category:</div>
+        <div id="cat-movers-${idx}"><div style="font-size:11px;color:var(--text3)">Loading…</div></div>
+        <button onclick="event.stopPropagation();setCat('${c.category}');showPage('prices')" style="margin-top:10px;width:100%;padding:7px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--accent);font-size:12px;cursor:pointer;font-family:var(--font-m)">
+          View all ${c.item_count} ${catMeta.label} →
+        </button>
       </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleCatExpand(idx) {
+  const panel = document.getElementById(`cat-expand-${idx}`);
+  const chevron = document.getElementById(`cat-chevron-${idx}`);
+  const isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  chevron.textContent = isOpen ? '▸' : '▾';
+  if (!isOpen) loadCatMovers(idx);
+}
+
+function loadCatMovers(idx) {
+  const cat = _summaryData[idx];
+  const moversEl = document.getElementById(`cat-movers-${idx}`);
+  if (!cat || !allData.length) return;
+  const items = allData.filter(d => d.category === cat.category && d.avg_price > 0 && d.price_change_pct != null);
+  const sorted = [...items].sort((a,b) => Math.abs(b.price_change_pct) - Math.abs(a.price_change_pct)).slice(0,3);
+  if (!sorted.length) { moversEl.innerHTML = '<div style="font-size:11px;color:var(--text3)">No movers data</div>'; return; }
+  moversEl.innerHTML = sorted.map(d => {
+    const dir = d.direction || 'stable';
+    const arrow = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '→';
+    const color = dir === 'up' ? 'var(--green)' : dir === 'down' ? 'var(--red)' : 'var(--text3)';
+    const sign = d.price_change_pct > 0 ? '+' : '';
+    return `<div onclick="event.stopPropagation();openModal('${d.name_english.replace(/'/g,"\'")}');showPage('prices')"
+      style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px">
+      <span>${d.name_english}</span>
+      <span style="color:${color};font-weight:700">${arrow} ${sign}${d.price_change_pct.toFixed(1)}% · Rs ${Math.round(d.avg_price)}</span>
     </div>`;
   }).join('');
 }
