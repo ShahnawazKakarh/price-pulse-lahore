@@ -120,7 +120,7 @@ async def get_anomalies(
                 "historical_stdev": round(stdev, 2),
                 "z_score":          round(z, 2),
                 "price_change_pct": float(chg_pct) if chg_pct else None,
-                "direction":        direction or "stable",
+                "direction":        {"up":"rising","down":"falling"}.get(direction or "stable", direction or "stable"),
                 "severity":         "high" if abs(z) >= 3 else "medium",
                 "signal":           "spike" if z > 0 else "drop",
                 "data_points":      len(hist),
@@ -370,7 +370,8 @@ async def get_summary(request: Request):
         s = cat_stats[cat]
         s["item_count"] += 1
         s["avg_price"]  += float(avg or 0)
-        s[direction or "stable"] += 1
+        dir_key = {"up": "rising", "down": "falling"}.get(direction or "stable", direction or "stable")
+        s[dir_key] += 1
         if chg_pct is not None:
             s["total_change"]  += float(chg_pct)
             s["change_count"]  += 1
