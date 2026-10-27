@@ -21,22 +21,21 @@ limiter = Limiter(key_func=get_remote_address)
 
 # ── DB helpers ─────────────────────────────────────────────────────────────────
 
-def _db():
-    from db.database import check_connection, get_db
-    if not check_connection():
-        raise HTTPException(status_code=503, detail="Database unavailable")
-    return get_db
-
-
 def _query(sql: str, params: dict = None):
-    from db.database import get_db
-    from sqlalchemy import text
-    with get_db() as db:
-        result = db.execute(text(sql), params or {})
-        return result.fetchall()
+    try:
+        from db.database import get_db
+        from sqlalchemy import text
+        with get_db() as db:
+            result = db.execute(text(sql), params or {})
+            return result.fetchall()
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"DB query failed: {e}")
+        raise HTTPException(status_code=503, detail=f"Database error: {e}")
 
 
-def _stdev(values: list[float]) -> float:
+def _stdev(values: list) -> float:
     if len(values) < 2:
         return 0.0
     mean = sum(values) / len(values)
@@ -44,7 +43,7 @@ def _stdev(values: list[float]) -> float:
     return math.sqrt(variance)
 
 
-def _mean(values: list[float]) -> float:
+def _mean(values: list) -> float:
     return sum(values) / len(values) if values else 0.0
 
 
@@ -61,7 +60,6 @@ async def get_anomalies(
     Flags items whose price today deviates > z_threshold std deviations
     from their mean over the last `days` days.
     """
-    _db()  # connectivity check
 
     # Today's prices
     # Use most recent available date (pipeline may not have run today yet)
@@ -151,7 +149,6 @@ async def get_trends(
     """
     7-day moving average + direction trend for one item.
     """
-    _db()
 
     rows = _query("""
         SELECT CAST(r.date AS DATE) as d, r.avg_price, r.min_price, r.max_price,
@@ -253,7 +250,6 @@ async def get_dow_patterns(
     Day-of-week price patterns.
     Shows which weekdays have historically higher/lower prices per category.
     """
-    _db()
 
     sql = """
         SELECT i.category, i.name_english, i.slug,
@@ -331,7 +327,6 @@ async def get_summary(request: Request):
     Full market summary: today's movers, anomalies count, category signals,
     and inflation index vs 30 days ago.
     """
-    _db()
 
     # Today
     latest_date_row = _query("SELECT MAX(CAST(date AS DATE)) FROM price_readings")
@@ -437,7 +432,6 @@ async def get_inflation_index(
     Lahore market inflation index — daily average price level indexed to
     the first available day in the window.
     """
-    _db()
 
     rows = _query("""
         SELECT CAST(r.date AS DATE) as d, AVG(r.avg_price) as avg_p, COUNT(*) as n
