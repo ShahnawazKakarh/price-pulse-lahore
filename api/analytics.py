@@ -470,3 +470,281 @@ async def get_inflation_index(
         "series":             series,
         "ml_status":          "price_index",
     }
+
+
+# ── /analytics/forecast/{slug} ────────────────────────────────────────────────
+
+@router.get("/forecast/{slug}")
+async def get_forecast(
+    request: Request,
+    slug: str,
+    days: int = Query(90, ge=30, le=180, description="Lookback window"),
+    horizon: int = Query(14, ge=7, le=30, description="Forecast horizon in days"),
+):
+    """
+    Phase 3: Extended price forecast with confidence bands.
+    Uses linear regression over the lookback window with seasonal weekly
+    correction and expanding uncertainty bands.
+    """
+
+    rows = _query("""
+        SELECT CAST(r.date AS DATE) as d, r.avg_price
+        FROM price_readings r
+        JOIN items i ON r.item_id = i.id
+        WHERE i.slug = :slug
+          AND CAST(r.date AS DATE) >= CURRENT_DATE - INTERVAL '1 day' * :days
+          AND r.avg_price > 0
+        ORDER BY d ASC
+    """, {"slug": slug, "days": days})
+
+    if not rows or len(rows) < 14:
+        raise HTTPException(status_code=404, detail=f"Not enough data for '{slug}' (need ≥14 days)")
+
+    name_row = _query("SELECT name_english, name_urdu, category, unit FROM items WHERE slug = :slug", {"slug": slug})
+    name_en  = name_row[0][0] if name_row else slug
+    unit     = name_row[0][3] if name_row else ""
+
+    dates  = [row[0] for row in rows]
+    prices = [float(row[1]) for row in rows]
+    n      = len(prices)
+
+    # ── Ordinary least-squares linear regression ──────────────────────────────
+    xs = list(range(n))
+    mx, my = _mean(xs), _mean(prices)
+    cov_xy = sum((xs[i] - mx) * (prices[i] - my) for i in range(n))
+    var_x  = sum((x - mx) ** 2 for x in xs)
+    slope  = cov_xy / var_x if var_x else 0
+    intercept = my - slope * mx
+
+    # ── Weekly seasonal correction (7-bucket DOW averages vs overall mean) ────
+    dow_sums = [0.0] * 7
+    dow_cnts = [0]   * 7
+    for i, row in enumerate(rows):
+        # Extract DOW from the date object
+        dow = row[0].weekday()  # Monday=0 … Sunday=6
+        dow_sums[dow] += prices[i]
+        dow_cnts[dow] += 1
+    dow_avg   = [dow_sums[d] / dow_cnts[d] if dow_cnts[d] else my for d in range(7)]
+    overall_m = _mean(prices)
+    seasonal  = [a - overall_m for a in dow_avg]
+
+    # ── Residual std for confidence bands ────────────────────────────────────
+    residuals = [prices[i] - (intercept + slope * xs[i]) - seasonal[dates[i].weekday()] for i in range(n)]
+    res_std   = _stdev(residuals) if len(residuals) >= 2 else 0
+
+    # ── Historical series with trend + seasonal components ───────────────────
+    series = []
+    for i, row in enumerate(rows):
+        trend_val    = round(intercept + slope * i, 2)
+        seasonal_val = round(seasonal[row[0].weekday()], 2)
+        series.append({
+            "date":          str(row[0]),
+            "actual":        prices[i],
+            "trend":         trend_val,
+            "seasonal":      seasonal_val,
+            "residual":      round(prices[i] - trend_val - seasonal_val, 2),
+        })
+
+    # ── Forecast with widening confidence bands ───────────────────────────────
+    from datetime import date as date_type, timedelta
+    last_date  = dates[-1]
+    forecast   = []
+    for i in range(1, horizon + 1):
+        future_date = last_date + timedelta(days=i)
+        trend_pred  = intercept + slope * (n - 1 + i)
+        seas_corr   = seasonal[future_date.weekday()]
+        point       = round(max(0, trend_pred + seas_corr), 2)
+        # Bands grow with sqrt(horizon) — classic prediction interval
+        band_half   = round(res_std * (1.645 * (i / horizon) ** 0.5 + 1), 2)
+        forecast.append({
+            "date":      str(future_date),
+            "predicted": point,
+            "lower":     round(max(0, point - band_half), 2),
+            "upper":     round(point + band_half, 2),
+        })
+
+    trend_label = "rising" if slope > 0.5 else "falling" if slope < -0.5 else "stable"
+
+    return {
+        "slug":          slug,
+        "name_english":  name_en,
+        "unit":          unit,
+        "data_points":   n,
+        "slope_per_day": round(slope, 4),
+        "trend":         trend_label,
+        "residual_std":  round(res_std, 2),
+        "series":        series,
+        "forecast":      forecast,
+        "ml_status":     "linear_regression_seasonal_decomposition",
+    }
+
+
+# ── /analytics/seasonal/{slug} ───────────────────────────────────────────────
+
+@router.get("/seasonal/{slug}")
+async def get_seasonal(
+    request: Request,
+    slug: str,
+    days: int = Query(90, ge=30, le=180),
+):
+    """
+    Phase 3: Seasonal decomposition — trend, weekly seasonality, residuals.
+    Pure-Python STL-style (no external ML deps).
+    """
+
+    rows = _query("""
+        SELECT CAST(r.date AS DATE) as d, r.avg_price
+        FROM price_readings r
+        JOIN items i ON r.item_id = i.id
+        WHERE i.slug = :slug
+          AND CAST(r.date AS DATE) >= CURRENT_DATE - INTERVAL '1 day' * :days
+          AND r.avg_price > 0
+        ORDER BY d ASC
+    """, {"slug": slug, "days": days})
+
+    if not rows or len(rows) < 14:
+        raise HTTPException(status_code=404, detail="Not enough data for seasonal decomposition")
+
+    name_row = _query("SELECT name_english, name_urdu, category, unit FROM items WHERE slug = :slug", {"slug": slug})
+    name_en  = name_row[0][0] if name_row else slug
+
+    prices = [float(r[1]) for r in rows]
+    n      = len(prices)
+
+    # ── Trend: 7-day centred moving average ──────────────────────────────────
+    trend = []
+    for i in range(n):
+        lo, hi = max(0, i - 3), min(n, i + 4)
+        trend.append(round(_mean(prices[lo:hi]), 2))
+
+    # ── Seasonal: average deviation from trend by DOW ────────────────────────
+    dow_dev_sums = [0.0] * 7
+    dow_dev_cnts = [0]   * 7
+    for i, row in enumerate(rows):
+        dow = row[0].weekday()
+        dev = prices[i] - trend[i]
+        dow_dev_sums[dow] += dev
+        dow_dev_cnts[dow] += 1
+    dow_seasonal = [
+        dow_dev_sums[d] / dow_dev_cnts[d] if dow_dev_cnts[d] else 0
+        for d in range(7)
+    ]
+
+    # ── Build decomposed series ───────────────────────────────────────────────
+    series = []
+    for i, row in enumerate(rows):
+        dow      = row[0].weekday()
+        seas_val = round(dow_seasonal[dow], 2)
+        resid    = round(prices[i] - trend[i] - seas_val, 2)
+        series.append({
+            "date":     str(row[0]),
+            "observed": prices[i],
+            "trend":    trend[i],
+            "seasonal": seas_val,
+            "residual": resid,
+        })
+
+    DOW_NAMES = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
+    weekly_pattern = {DOW_NAMES[d]: round(dow_seasonal[d], 2) for d in range(7)}
+    peak_day    = max(weekly_pattern, key=lambda k: weekly_pattern[k])
+    trough_day  = min(weekly_pattern, key=lambda k: weekly_pattern[k])
+
+    return {
+        "slug":           slug,
+        "name_english":   name_en,
+        "days":           days,
+        "data_points":    n,
+        "series":         series,
+        "weekly_pattern": weekly_pattern,
+        "peak_day":       peak_day,
+        "trough_day":     trough_day,
+        "peak_premium":   round(weekly_pattern[peak_day], 2),
+        "trough_saving":  round(abs(weekly_pattern[trough_day]), 2),
+        "ml_status":      "stl_decomposition_weekly",
+    }
+
+
+# ── /analytics/correlations ──────────────────────────────────────────────────
+
+@router.get("/correlations")
+async def get_correlations(
+    request: Request,
+    category: str = Query(..., description="Category to analyse"),
+    days: int = Query(90, ge=30, le=180),
+):
+    """
+    Phase 3: Pearson correlation matrix for all items in a category.
+    Shows which items move together (supply-chain links, seasonal effects).
+    """
+
+    rows = _query("""
+        SELECT i.slug, i.name_english, CAST(r.date AS DATE) as d, r.avg_price
+        FROM price_readings r
+        JOIN items i ON r.item_id = i.id
+        WHERE i.category = :cat
+          AND CAST(r.date AS DATE) >= CURRENT_DATE - INTERVAL '1 day' * :days
+          AND r.avg_price > 0
+        ORDER BY i.slug, d ASC
+    """, {"cat": category, "days": days})
+
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"No data for category '{category}'")
+
+    # Build date-aligned price matrix
+    from collections import OrderedDict
+    item_series: dict = {}
+    item_names: dict  = {}
+    all_dates: set    = set()
+
+    for row in rows:
+        slug, name, d, price = row
+        item_names[slug] = name
+        item_series.setdefault(slug, {})[str(d)] = float(price)
+        all_dates.add(str(d))
+
+    sorted_dates = sorted(all_dates)
+    slugs = list(item_series.keys())
+
+    # Fill gaps with previous value (forward-fill)
+    aligned: dict = {}
+    for slug in slugs:
+        series = []
+        last   = None
+        for d in sorted_dates:
+            v = item_series[slug].get(d, last)
+            series.append(v)
+            if v is not None:
+                last = v
+        aligned[slug] = series
+
+    # Drop items with <50% coverage
+    min_coverage = len(sorted_dates) * 0.5
+    slugs = [s for s in slugs if sum(1 for v in aligned[s] if v is not None) >= min_coverage]
+
+    # Pearson correlation
+    def pearson(a: list, b: list) -> float:
+        pairs = [(x, y) for x, y in zip(a, b) if x is not None and y is not None]
+        if len(pairs) < 10:
+            return None
+        xs = [p[0] for p in pairs]
+        ys = [p[1] for p in pairs]
+        mx, my = _mean(xs), _mean(ys)
+        num    = sum((xs[i] - mx) * (ys[i] - my) for i in range(len(pairs)))
+        den    = (_stdev(xs) * _stdev(ys) * (len(pairs) - 1)) if len(pairs) > 1 else 0
+        return round(num / den, 3) if den else None
+
+    matrix = []
+    for s1 in slugs:
+        row_out = {"slug": s1, "name": item_names[s1], "correlations": {}}
+        for s2 in slugs:
+            r = pearson(aligned[s1], aligned[s2])
+            row_out["correlations"][s2] = r
+        matrix.append(row_out)
+
+    return {
+        "category":    category,
+        "days":        days,
+        "items":       [{"slug": s, "name": item_names[s]} for s in slugs],
+        "matrix":      matrix,
+        "ml_status":   "pearson_correlation",
+    }

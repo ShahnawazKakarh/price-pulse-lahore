@@ -1147,6 +1147,7 @@ async function fetchInsights() {
       const data = await sumRes.json();
       renderCatSignals(data.categories || []);
       renderWeeklyDigest(data);
+    initCorrButtons();
     }
     if (dowRes && dowRes.ok) {
       const data = await dowRes.json();
@@ -1477,6 +1478,184 @@ function loadCatMovers(idx) {
   }).join('');
 }
 
+
+// ── Phase 3: Extended Forecast ─────────────────────────────────────────────
+let _forecastChart = null;
+let _forecastSlug  = null;
+
+async function loadForecast(slug, nameEn) {
+  _forecastSlug = slug;
+  const section = document.getElementById('p3-forecast-section');
+  if (section) section.style.display = '';
+
+  const meta = document.getElementById('forecast-meta');
+  if (meta) meta.textContent = `Loading forecast for ${nameEn}…`;
+
+  try {
+    const data = await fetch(`${BASE}/analytics/forecast/${slug}?days=90&horizon=14`).then(r => r.json());
+
+    const labels  = [...data.series.map(s => s.date), ...data.forecast.map(f => f.date)];
+    const actual  = [...data.series.map(s => s.actual), ...data.forecast.map(() => null)];
+    const trend   = [...data.series.map(s => s.trend),  ...data.forecast.map(() => null)];
+    const predL   = [...data.series.map(() => null),     ...data.forecast.map(f => f.lower)];
+    const predP   = [...data.series.map(() => null),     ...data.forecast.map(f => f.predicted)];
+    const predU   = [...data.series.map(() => null),     ...data.forecast.map(f => f.upper)];
+
+    const ctx = document.getElementById('forecast-canvas');
+    if (!ctx) return;
+    if (_forecastChart) { _forecastChart.destroy(); _forecastChart = null; }
+
+    _forecastChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Actual',
+            data: actual,
+            borderColor: 'rgba(255,180,0,0.9)',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            pointRadius: 0,
+            spanGaps: false,
+          },
+          {
+            label: 'Trend',
+            data: trend,
+            borderColor: 'rgba(100,100,200,0.5)',
+            backgroundColor: 'transparent',
+            borderWidth: 1,
+            borderDash: [4,4],
+            pointRadius: 0,
+            spanGaps: false,
+          },
+          {
+            label: 'Upper band',
+            data: predU,
+            borderColor: 'transparent',
+            backgroundColor: 'rgba(59,158,255,0.12)',
+            fill: '+1',
+            pointRadius: 0,
+            spanGaps: false,
+          },
+          {
+            label: 'Predicted',
+            data: predP,
+            borderColor: '#3b9eff',
+            backgroundColor: 'transparent',
+            borderWidth: 2.5,
+            pointRadius: 0,
+            spanGaps: false,
+          },
+          {
+            label: 'Lower band',
+            data: predL,
+            borderColor: 'transparent',
+            backgroundColor: 'rgba(59,158,255,0.12)',
+            fill: '-1',
+            pointRadius: 0,
+            spanGaps: false,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: ctx => ctx.dataset.label !== 'Upper band' && ctx.dataset.label !== 'Lower band'
+                ? `${ctx.dataset.label}: Rs ${Math.round(ctx.raw)}`
+                : null,
+            },
+          },
+        },
+        scales: {
+          x: {
+            ticks: { color: '#888', maxTicksLimit: 10, font: { size: 10 } },
+            grid:  { color: 'rgba(255,255,255,0.04)' },
+          },
+          y: {
+            ticks: { color: '#888', font: { size: 10 }, callback: v => 'Rs ' + v },
+            grid:  { color: 'rgba(255,255,255,0.06)' },
+          },
+        },
+      },
+    });
+
+    const arrow = data.trend === 'rising' ? '↑' : data.trend === 'falling' ? '↓' : '→';
+    const slope = Math.abs(data.slope_per_day).toFixed(2);
+    if (meta) meta.innerHTML = `<b>${nameEn}</b> · Trend: <b>${arrow} ${data.trend}</b> (${slope} Rs/day) · Residual σ: ${data.residual_std} Rs · ${data.data_points} data points`;
+  } catch(e) {
+    if (meta) meta.textContent = 'Forecast unavailable (need 90+ days of data for this item)';
+  }
+}
+
+// ── Phase 3: Correlation Matrix ───────────────────────────────────────────
+let _corrLoaded = {};
+
+function initCorrButtons() {
+  const wrap = document.getElementById('corr-cat-btns');
+  if (!wrap || !_summaryData) return;
+  wrap.innerHTML = '';
+  (_summaryData.categories || []).forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'filter-btn';
+    btn.textContent = c.category;
+    btn.onclick = () => loadCorrelations(c.category);
+    wrap.appendChild(btn);
+  });
+}
+
+async function loadCorrelations(category) {
+  const container = document.getElementById('corr-container');
+  if (!container) return;
+  if (_corrLoaded[category]) { container.innerHTML = _corrLoaded[category]; return; }
+  container.innerHTML = '<div style="color:var(--text-muted);font-size:12px">Loading…</div>';
+
+  try {
+    const data = await fetch(`${BASE}/analytics/correlations?category=${encodeURIComponent(category)}&days=90`).then(r => r.json());
+    const items = data.items;
+    if (!items || items.length === 0) {
+      container.innerHTML = '<div style="color:var(--text-muted);font-size:12px">Not enough data for this category yet.</div>';
+      return;
+    }
+
+    // Build heatmap table
+    let tbl = '<div style="overflow-x:auto"><table id="corr-table"><thead><tr><th></th>';
+    items.forEach(it => {
+      tbl += `<th title="${it.name}">${it.name.length > 8 ? it.name.slice(0,8)+'…' : it.name}</th>`;
+    });
+    tbl += '</tr></thead><tbody>';
+
+    data.matrix.forEach((row, ri) => {
+      tbl += `<tr><th style="text-align:left;white-space:nowrap">${items[ri].name.length > 10 ? items[ri].name.slice(0,10)+'…' : items[ri].name}</th>`;
+      items.forEach(it => {
+        const r = row.correlations[it.slug];
+        const val = r != null ? r : 0;
+        const abs = Math.abs(val);
+        // Color: positive → blue, negative → red, diagonal → grey
+        let bg;
+        if (ri === items.indexOf(it)) bg = 'rgba(100,100,100,0.3)';
+        else if (val > 0) bg = `rgba(59,158,255,${(abs * 0.8).toFixed(2)})`;
+        else               bg = `rgba(255,80,80,${(abs * 0.8).toFixed(2)})`;
+        const txt = r != null ? val.toFixed(2) : '—';
+        const textCol = abs > 0.4 ? '#fff' : 'var(--text-muted)';
+        tbl += `<td style="background:${bg};color:${textCol};font-weight:${abs>0.6?700:400}" title="${items[ri].name} vs ${it.name}: ${txt}">${txt}</td>`;
+      });
+      tbl += '</tr>';
+    });
+    tbl += '</tbody></table></div>';
+    tbl += '<div style="margin-top:8px;font-size:11px;color:var(--text-muted)">🔵 positive correlation · 🔴 negative · values closer to ±1 = stronger link</div>';
+
+    _corrLoaded[category] = tbl;
+    container.innerHTML = tbl;
+  } catch(e) {
+    container.innerHTML = '<div style="color:var(--text-muted);font-size:12px">Correlations unavailable (need 90+ days).</div>';
+  }
+}
+
 fetchData();
 setInterval(fetchData, 30 * 60 * 1000);
 fetchInsights();
@@ -1523,6 +1702,27 @@ setInterval(fetchInsights, 30 * 60 * 1000);
       <button class="alert-submit" id="alert-submit-btn" onclick="submitAlert()">Set Alert</button>
     </div>
     <div class="alert-list" id="alert-list"></div>
+  </div>
+</div>
+
+
+<!-- ── Phase 3: Forecast & Correlation ───────────────────────── -->
+<div class="insights-section" style="margin-top:0" id="p3-forecast-section">
+  <div class="p3-section">
+    <div class="p3-section-title">📈 Extended Forecast <span style="font-size:11px;font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0;margin-left:4px">14-day with confidence bands — select an item above to load</span></div>
+    <div id="forecast-canvas-wrap" style="position:relative"><canvas id="forecast-canvas" height="160"></canvas></div>
+    <div class="conf-band-legend">
+      <span><span class="conf-dot" style="background:#3b9eff"></span>Predicted</span>
+      <span><span class="conf-dot" style="background:rgba(59,158,255,0.3);width:16px"></span>95% band</span>
+      <span><span class="conf-dot" style="background:rgba(255,180,0,0.8)"></span>Actual history</span>
+    </div>
+    <div id="forecast-meta" style="margin-top:10px;font-size:12px;color:var(--text-muted)"></div>
+  </div>
+
+  <div class="p3-section">
+    <div class="p3-section-title">🔗 Price Correlations <span style="font-size:11px;font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0;margin-left:4px">items that move together in same category</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px" id="corr-cat-btns"></div>
+    <div id="corr-container"><div style="color:var(--text-muted);font-size:12px">Click a category above to load correlation matrix.</div></div>
   </div>
 </div>
 
