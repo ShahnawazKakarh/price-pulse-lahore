@@ -451,3 +451,40 @@ async def get_item(request: Request, slug: str):
         raise HTTPException(status_code=404, detail=f"Item '{slug}' not found")
 
     return match
+
+
+# ── Price Alerts endpoint ──────────────────────────────────────────────────────
+from pydantic import BaseModel, EmailStr
+
+class AlertCreate(BaseModel):
+    email: str
+    slug: str
+    item_name: str
+    direction: str   # "above" | "below"
+    threshold: float
+
+@app.post("/alerts", tags=["alerts"])
+async def create_alert(payload: AlertCreate):
+    """Store a price alert in Supabase price_alerts table."""
+    try:
+        from db.database import get_db
+        from sqlalchemy import text
+        with get_db() as db:
+            db.execute(text("""
+                INSERT INTO price_alerts (email, slug, item_name, direction, threshold, active, created_at)
+                VALUES (:email, :slug, :item_name, :direction, :threshold, true, NOW())
+                ON CONFLICT (email, slug, direction) DO UPDATE
+                  SET threshold = EXCLUDED.threshold, active = true, updated_at = NOW()
+            """), {
+                "email":     payload.email,
+                "slug":      payload.slug,
+                "item_name": payload.item_name,
+                "direction": payload.direction,
+                "threshold": payload.threshold,
+            })
+            db.commit()
+        return {"status": "ok", "message": f"Alert set for {payload.item_name}"}
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Alert insert failed: {e}")
+        raise HTTPException(status_code=503, detail=str(e))

@@ -37,6 +37,53 @@
       --font-u:   'Noto Nastaliq Urdu', serif;
     }
     html { scroll-behavior: smooth; }
+
+    /* ── Price range filter ── */
+    .price-range-wrap { display:flex; align-items:center; gap:10px; font-size:12px; color:var(--text2); }
+    .price-range-wrap input[type=range] { accent-color:var(--accent); width:90px; cursor:pointer; }
+    .price-range-lbl { font-family:var(--font-m); font-size:11px; color:var(--accent); min-width:60px; }
+
+    /* ── Favourite star ── */
+    .fav-star { cursor:pointer; font-size:14px; opacity:.35; transition:opacity .2s, transform .2s; user-select:none; }
+    .fav-star.active { opacity:1; transform:scale(1.2); }
+    .fav-filter-btn { font-family:var(--font-m); font-size:11px; padding:5px 10px; border-radius:6px; border:1px solid var(--border); background:transparent; color:var(--text2); cursor:pointer; transition:all .2s; }
+    .fav-filter-btn.active { border-color:var(--amber); color:var(--amber); background:var(--amber-dim); }
+
+    /* ── Compare button ── */
+    .compare-btn { font-size:10px; padding:3px 8px; border-radius:5px; border:1px solid var(--border2); background:transparent; color:var(--text3); cursor:pointer; font-family:var(--font-m); transition:all .2s; white-space:nowrap; }
+    .compare-btn.selected { border-color:var(--blue); color:var(--blue); background:var(--blue-dim); }
+    .compare-bar { position:fixed; bottom:0; left:0; right:0; z-index:200; background:var(--bg2); border-top:1px solid var(--border); padding:12px 20px; display:none; align-items:center; gap:12px; font-size:13px; }
+    .compare-bar.visible { display:flex; }
+    .compare-bar-items { flex:1; display:flex; gap:8px; flex-wrap:wrap; }
+    .compare-chip { background:var(--bg3); border:1px solid var(--border2); border-radius:6px; padding:4px 10px; font-size:12px; display:flex; align-items:center; gap:6px; }
+    .compare-chip button { background:none; border:none; color:var(--text3); cursor:pointer; font-size:14px; line-height:1; padding:0; }
+    .compare-go { padding:8px 18px; border-radius:8px; background:var(--accent); color:#000; font-weight:700; font-size:12px; border:none; cursor:pointer; font-family:var(--font-d); }
+    .compare-clear { padding:8px 14px; border-radius:8px; border:1px solid var(--border); background:transparent; color:var(--text2); font-size:12px; cursor:pointer; font-family:var(--font-d); }
+
+    /* ── Compare modal overlay ── */
+    .compare-modal { position:fixed; inset:0; z-index:300; background:rgba(0,0,0,.8); display:none; align-items:center; justify-content:center; padding:20px; }
+    .compare-modal.open { display:flex; }
+    .compare-modal-inner { background:var(--bg2); border:1px solid var(--border); border-radius:16px; width:100%; max-width:780px; padding:24px; position:relative; max-height:90vh; overflow-y:auto; }
+    .compare-modal-close { position:absolute; top:16px; right:16px; background:none; border:none; color:var(--text2); font-size:20px; cursor:pointer; }
+    .compare-chart-wrap { width:100%; height:260px; margin:16px 0; }
+    .compare-table { width:100%; border-collapse:collapse; font-size:13px; margin-top:12px; }
+    .compare-table th { text-align:left; padding:8px 12px; border-bottom:1px solid var(--border); color:var(--text3); font-weight:500; font-size:11px; text-transform:uppercase; }
+    .compare-table td { padding:10px 12px; border-bottom:1px solid var(--border); }
+
+    /* ── Price alert modal ── */
+    .alert-modal { position:fixed; inset:0; z-index:300; background:rgba(0,0,0,.8); display:none; align-items:center; justify-content:center; padding:20px; }
+    .alert-modal.open { display:flex; }
+    .alert-modal-inner { background:var(--bg2); border:1px solid var(--border); border-radius:16px; width:100%; max-width:440px; padding:28px; position:relative; }
+    .alert-modal-close { position:absolute; top:16px; right:16px; background:none; border:none; color:var(--text2); font-size:20px; cursor:pointer; }
+    .alert-form label { display:block; font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.08em; margin-bottom:6px; margin-top:14px; }
+    .alert-form input, .alert-form select { width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border2); background:var(--bg3); color:var(--text); font-family:var(--font-d); font-size:13px; outline:none; }
+    .alert-form input:focus, .alert-form select:focus { border-color:var(--accent); }
+    .alert-submit { margin-top:18px; width:100%; padding:12px; border-radius:10px; background:var(--accent); color:#000; font-weight:700; font-size:14px; border:none; cursor:pointer; font-family:var(--font-d); }
+    .alert-submit:disabled { opacity:.5; cursor:not-allowed; }
+    .alert-list { margin-top:16px; }
+    .alert-item { display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border); font-size:12px; }
+    .alert-item button { background:none; border:none; color:var(--red); cursor:pointer; font-size:16px; }
+
     body { background: var(--bg); color: var(--text); font-family: var(--font-d); min-height: 100vh; overflow-x: hidden; }
     body::before {
       content: ''; position: fixed; inset: 0;
@@ -376,6 +423,16 @@
       <option value="change-asc">Biggest Loser</option>
     </select>
     <input class="search-input" id="search" type="text" placeholder="Search (tomato, آلو...)">
+    <div class="ctrl-divider"></div>
+    <div class="price-range-wrap">
+      <span>Rs</span>
+      <input type="range" id="range-min" min="0" max="5000" value="0" step="10">
+      <span>–</span>
+      <input type="range" id="range-max" min="0" max="5000" value="5000" step="10">
+      <span class="price-range-lbl" id="range-lbl">0–5000</span>
+    </div>
+    <div class="ctrl-divider"></div>
+    <button class="fav-filter-btn" id="fav-filter-btn" onclick="toggleFavFilter()">⭐ Favourites</button>
   </div>
   <div class="result-count" id="result-count"></div>
 
@@ -423,6 +480,10 @@
         <div class="state-wrap"><div class="spinner"></div><span>Loading items...</span></div>
       </div>
       <div class="basket-summary" id="basket-summary"></div>
+    </div>
+    <div id="basket-history-chart" style="display:none;margin-top:20px;background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:16px">
+      <div style="font-size:12px;font-weight:600;margin-bottom:12px;color:var(--text2)">📈 Basket Cost History (last 30 days)</div>
+      <div style="height:180px"><canvas id="basket-history-canvas"></canvas></div>
     </div>
   </div>
 </div>
@@ -693,10 +754,12 @@ function renderTicker() {
 // ── Filter + Sort ─────────────────────────────────────────────────────────────
 function getFiltered() {
   let data = allData.filter(d => d.avg_price > 0);
+  if (_showFavsOnly) data = data.filter(d => _favs.has(d.slug));
   if (activeTab !== 'all') data = data.filter(d => d.category === activeTab);
   if (activeDirs.size > 0) data = data.filter(d => activeDirs.has(d.direction || 'stable'));
   const q = searchQ.toLowerCase().trim();
   if (q) data = data.filter(d => d.name_english.toLowerCase().includes(q) || (d.name_urdu||'').includes(q));
+  data = data.filter(d => d.avg_price >= _priceMin && d.avg_price <= _priceMax);
   data.sort((a,b) => {
     switch(sortKey) {
       case 'name-asc':   return a.name_english.localeCompare(b.name_english);
@@ -755,7 +818,13 @@ function renderTable() {
       </td>
       <td class="change-cell"><span class="change-pill ${dir}">${arrow} ${pctTxt}</span></td>
       <td><canvas id="spark-${i}" class="sparkline"></canvas></td>
+      <td onclick="event.stopPropagation()" style="white-space:nowrap;text-align:right">
+        <span class="fav-star ${_favs.has(d.slug)?'active':''}" onclick="toggleFav('${d.slug}',this)">⭐</span>
+        &nbsp;
+        <button class="compare-btn ${_compareSet.has(d.slug)?'selected':''}" onclick="toggleCompare('${d.slug}','${d.name_english.replace(/'/g,"\'")}',this)">${_compareSet.has(d.slug)?'✓ Added':'+ Compare'}</button>
+      </td>
     </tr>`;
+
   }).join('');
   document.getElementById('table-container').innerHTML = `
     <table class="price-table">
@@ -834,6 +903,45 @@ function updateBasketTotal() {
     <div class="basket-stat"><span class="val" style="color:var(--green)">▲ ${rising}</span><span class="lbl"> items up today</span></div>
     <div class="basket-stat"><span class="val" style="color:var(--red)">▼ ${falling}</span><span class="lbl"> items down today</span></div>
   ` : '';
+}
+
+// ── Basket history ───────────────────────────────────────────────
+let _basketHistory = JSON.parse(localStorage.getItem('ppl_basket_history')||'[]');
+
+function saveBasketSnapshot(total) {
+  if (!total) return;
+  const today = new Date().toISOString().slice(0,10);
+  const existing = _basketHistory.findIndex(h => h.date === today);
+  if (existing >= 0) _basketHistory[existing].total = total;
+  else _basketHistory.push({ date: today, total });
+  _basketHistory = _basketHistory.slice(-30); // keep 30 days
+  try { localStorage.setItem('ppl_basket_history', JSON.stringify(_basketHistory)); } catch(e){}
+  renderBasketHistoryChart();
+}
+
+function renderBasketHistoryChart() {
+  const el = document.getElementById('basket-history-chart');
+  if (!el || _basketHistory.length < 2) return;
+  el.style.display = 'block';
+  const ctx = document.getElementById('basket-history-canvas')?.getContext('2d');
+  if (!ctx) return;
+  if (window._basketHistChart) window._basketHistChart.destroy();
+  window._basketHistChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: _basketHistory.map(h => h.date.slice(5)),
+      datasets: [{ label: 'Basket Total (Rs)', data: _basketHistory.map(h=>h.total),
+        borderColor:'#00d68f', backgroundColor:'rgba(0,214,143,.08)', borderWidth:2, pointRadius:3, tension:0.4, fill:true }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label: c=>`Rs ${c.raw}` } } },
+      scales:{
+        x:{ ticks:{ color:'#445566', font:{size:10} }, grid:{ color:'#1e2a35' } },
+        y:{ ticks:{ color:'#445566', callback:v=>`Rs ${v}` }, grid:{ color:'#1e2a35' } }
+      }
+    }
+  });
 }
 
 function clearBasket() {
@@ -934,6 +1042,7 @@ document.querySelectorAll('.dir-pill').forEach(btn => {
   btn.addEventListener('click', () => filterDir(btn.dataset.dir));
 });
 document.getElementById('sort-select').addEventListener('change', e => { sortKey = e.target.value; renderTable(); });
+initRangeFilter();
 document.getElementById('search').addEventListener('input', e => { searchQ = e.target.value; renderTable(); });
 
 // ── Fallback data ─────────────────────────────────────────────────────────────
@@ -1037,6 +1146,192 @@ function renderAnomalies(list) {
 
 let _summaryData = null;
 
+// ── Favourites ────────────────────────────────────────────────────
+let _favs = new Set(JSON.parse(localStorage.getItem('ppl_favs')||'[]'));
+let _showFavsOnly = false;
+
+function toggleFav(slug, el) {
+  if (_favs.has(slug)) { _favs.delete(slug); el.classList.remove('active'); }
+  else { _favs.add(slug); el.classList.add('active'); }
+  try { localStorage.setItem('ppl_favs', JSON.stringify([..._favs])); } catch(e){}
+}
+
+function toggleFavFilter() {
+  _showFavsOnly = !_showFavsOnly;
+  document.getElementById('fav-filter-btn').classList.toggle('active', _showFavsOnly);
+  renderTable();
+}
+
+// ── Price range filter ────────────────────────────────────────────
+let _priceMin = 0, _priceMax = 5000;
+function initRangeFilter() {
+  const minEl = document.getElementById('range-min');
+  const maxEl = document.getElementById('range-max');
+  const lbl   = document.getElementById('range-lbl');
+  function update() {
+    _priceMin = +minEl.value; _priceMax = +maxEl.value;
+    if (_priceMin > _priceMax) { [_priceMin, _priceMax] = [_priceMax, _priceMin]; }
+    lbl.textContent = `${_priceMin}–${_priceMax}`;
+    renderTable();
+  }
+  minEl.addEventListener('input', update);
+  maxEl.addEventListener('input', update);
+}
+
+// ── Compare ───────────────────────────────────────────────────────
+let _compareSet  = new Map(); // slug -> name
+let _compareChart = null;
+
+function toggleCompare(slug, name, btn) {
+  if (_compareSet.has(slug)) {
+    _compareSet.delete(slug);
+    btn.textContent = '+ Compare'; btn.classList.remove('selected');
+  } else {
+    if (_compareSet.size >= 3) { alert('Max 3 items to compare'); return; }
+    _compareSet.set(slug, name);
+    btn.textContent = '✓ Added'; btn.classList.add('selected');
+  }
+  renderCompareBar();
+}
+
+function renderCompareBar() {
+  const bar = document.getElementById('compare-bar');
+  const items = document.getElementById('compare-bar-items');
+  if (!_compareSet.size) { bar.classList.remove('visible'); return; }
+  bar.classList.add('visible');
+  items.innerHTML = [..._compareSet.entries()].map(([slug, name]) =>
+    `<div class="compare-chip">${name}<button onclick="removeCompare('${slug}')">×</button></div>`
+  ).join('');
+}
+
+function removeCompare(slug) {
+  _compareSet.delete(slug);
+  renderCompareBar();
+  renderTable();
+}
+
+function clearCompare() {
+  _compareSet.clear();
+  renderCompareBar();
+  renderTable();
+}
+
+function openCompareModal() {
+  if (_compareSet.size < 2) { alert('Select at least 2 items to compare'); return; }
+  const slugs = [..._compareSet.keys()];
+  const names = [..._compareSet.values()];
+  const items = slugs.map(s => allData.find(d => d.slug === s)).filter(Boolean);
+  document.getElementById('compare-subtitle').textContent = names.join(' vs ');
+
+  // Table
+  const rows = [
+    ['Price (Rs)', ...items.map(d => `Rs ${Math.round(d.avg_price)}`)],
+    ['Range', ...items.map(d => `${d.min_price}–${d.max_price}`)],
+    ['Unit', ...items.map(d => d.unit)],
+    ['Change', ...items.map(d => d.price_change_pct != null ? `${d.price_change_pct>0?'+':''}${d.price_change_pct.toFixed(1)}%` : '—')],
+    ['Direction', ...items.map(d => d.direction || 'stable')],
+    ['Category', ...items.map(d => d.category.replace(/_/g,' '))],
+  ];
+  const headerRow = `<tr><th>Metric</th>${names.map(n=>`<th>${n}</th>`).join('')}</tr>`;
+  const bodyRows  = rows.map(r => `<tr>${r.map((v,i)=>`<td${i===0?' style="color:var(--text3)"':''}>${v}</td>`).join('')}</tr>`).join('');
+  document.getElementById('compare-table').innerHTML = headerRow + bodyRows;
+
+  // Chart
+  const colors = ['#00d68f','#3b9eff','#a78bfa'];
+  const ctx = document.getElementById('compare-chart').getContext('2d');
+  if (_compareChart) { _compareChart.destroy(); _compareChart = null; }
+  const datasets = items.map((d, idx) => {
+    const pct  = d.price_change_pct || 0;
+    const prev = d.avg_price / (1 + pct/100);
+    const pts  = [prev*0.98, prev*1.01, prev*0.99, prev, prev*1.005, prev*(1+pct/200), d.avg_price];
+    return { label: d.name_english, data: pts, borderColor: colors[idx], borderWidth:2, pointRadius:3, tension:0.4, fill:false };
+  });
+  _compareChart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: ['Mon','Tue','Wed','Thu','Fri','Sat','Today'], datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color:'#8899aa', font:{ size:12 } } }, tooltip: { mode:'index', intersect:false } },
+      scales: {
+        x: { ticks:{ color:'#445566' }, grid:{ color:'#1e2a35' } },
+        y: { ticks:{ color:'#445566', callback: v=>`Rs ${v}` }, grid:{ color:'#1e2a35' } }
+      }
+    }
+  });
+
+  document.getElementById('compare-modal').classList.add('open');
+}
+
+function closeCompareModal() {
+  document.getElementById('compare-modal').classList.remove('open');
+}
+
+// ── Price Alerts ──────────────────────────────────────────────────
+let _localAlerts = JSON.parse(localStorage.getItem('ppl_alerts')||'[]');
+
+function openAlertModal() {
+  // populate item select
+  const sel = document.getElementById('alert-item');
+  const sorted = [...allData].filter(d=>d.avg_price>0).sort((a,b)=>a.name_english.localeCompare(b.name_english));
+  sel.innerHTML = sorted.map(d=>`<option value="${d.slug}">${d.name_english} (Rs ${Math.round(d.avg_price)})</option>`).join('');
+  renderAlertList();
+  document.getElementById('alert-modal').classList.add('open');
+}
+
+function closeAlertModal() { document.getElementById('alert-modal').classList.remove('open'); }
+
+function renderAlertList() {
+  const el = document.getElementById('alert-list');
+  if (!_localAlerts.length) { el.innerHTML = '<div style="font-size:12px;color:var(--text3);padding-top:10px">No alerts set.</div>'; return; }
+  el.innerHTML = '<div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Your Alerts</div>' +
+    _localAlerts.map((a,i) => `<div class="alert-item">
+      <span>${a.item_name} <span style="color:var(--text3)">${a.direction} Rs ${a.threshold}</span></span>
+      <button onclick="deleteAlert(${i})">×</button>
+    </div>`).join('');
+}
+
+function deleteAlert(i) {
+  _localAlerts.splice(i,1);
+  try { localStorage.setItem('ppl_alerts', JSON.stringify(_localAlerts)); } catch(e){}
+  renderAlertList();
+}
+
+async function submitAlert() {
+  const email     = document.getElementById('alert-email').value.trim();
+  const slug      = document.getElementById('alert-item').value;
+  const direction = document.getElementById('alert-direction').value;
+  const threshold = +document.getElementById('alert-threshold').value;
+  const item      = allData.find(d => d.slug === slug);
+  if (!email || !email.includes('@')) { alert('Enter a valid email'); return; }
+  if (!threshold) { alert('Enter a threshold price'); return; }
+  const btn = document.getElementById('alert-submit-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  try {
+    const res = await fetch(`${BASE}/alerts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, slug, item_name: item?.name_english || slug, direction, threshold }),
+      signal: AbortSignal.timeout(10000)
+    });
+    if (res.ok) {
+      const alert_entry = { email, slug, item_name: item?.name_english || slug, direction, threshold };
+      _localAlerts.push(alert_entry);
+      try { localStorage.setItem('ppl_alerts', JSON.stringify(_localAlerts)); } catch(e){}
+      renderAlertList();
+      document.getElementById('alert-threshold').value = '';
+      btn.textContent = '✓ Alert Set!';
+      setTimeout(() => { btn.disabled = false; btn.textContent = 'Set Alert'; }, 2000);
+    } else {
+      const err = await res.json().catch(()=>({detail:'Server error'}));
+      btn.textContent = `Error: ${err.detail||'Failed'}`;
+      setTimeout(() => { btn.disabled = false; btn.textContent = 'Set Alert'; }, 3000);
+    }
+  } catch(e) {
+    btn.textContent = 'Network error';
+    setTimeout(() => { btn.disabled = false; btn.textContent = 'Set Alert'; }, 3000);
+  }
+}
+
 function renderCatSignals(cats) {
   _summaryData = cats;
   const el = document.getElementById('cat-signals');
@@ -1115,5 +1410,49 @@ setInterval(fetchData, 30 * 60 * 1000);
 fetchInsights();
 setInterval(fetchInsights, 30 * 60 * 1000);
 </script>
+
+<!-- Compare bar -->
+<div class="compare-bar" id="compare-bar">
+  <span style="font-size:12px;color:var(--text2);white-space:nowrap">Compare:</span>
+  <div class="compare-bar-items" id="compare-bar-items"></div>
+  <button class="compare-go" onclick="openCompareModal()">Compare →</button>
+  <button class="compare-clear" onclick="clearCompare()">Clear</button>
+</div>
+
+<!-- Compare modal -->
+<div class="compare-modal" id="compare-modal">
+  <div class="compare-modal-inner">
+    <button class="compare-modal-close" onclick="closeCompareModal()">✕</button>
+    <h2 style="font-size:18px;margin-bottom:4px">📊 Price Compare</h2>
+    <p style="font-size:12px;color:var(--text3)" id="compare-subtitle"></p>
+    <div class="compare-chart-wrap"><canvas id="compare-chart"></canvas></div>
+    <table class="compare-table" id="compare-table"></table>
+  </div>
+</div>
+
+<!-- Price Alert modal -->
+<div class="alert-modal" id="alert-modal">
+  <div class="alert-modal-inner">
+    <button class="alert-modal-close" onclick="closeAlertModal()">✕</button>
+    <h2 style="font-size:18px;margin-bottom:4px">🔔 Price Alerts</h2>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:4px">Get notified when a price crosses your threshold.</p>
+    <div class="alert-form">
+      <label>Your Email</label>
+      <input type="email" id="alert-email" placeholder="you@example.com">
+      <label>Item</label>
+      <select id="alert-item"></select>
+      <label>Alert when price goes</label>
+      <select id="alert-direction">
+        <option value="above">Above (Rs)</option>
+        <option value="below">Below (Rs)</option>
+      </select>
+      <label>Threshold Price (Rs)</label>
+      <input type="number" id="alert-threshold" placeholder="e.g. 300">
+      <button class="alert-submit" id="alert-submit-btn" onclick="submitAlert()">Set Alert</button>
+    </div>
+    <div class="alert-list" id="alert-list"></div>
+  </div>
+</div>
+
 </body>
 </html>
