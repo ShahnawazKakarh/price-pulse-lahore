@@ -64,27 +64,33 @@ async def get_anomalies(
     _db()  # connectivity check
 
     # Today's prices
+    # Use most recent available date (pipeline may not have run today yet)
+    latest_date_row = _query("SELECT MAX(CAST(date AS DATE)) FROM price_readings")
+    latest_date = latest_date_row[0][0] if latest_date_row and latest_date_row[0][0] else None
+    if not latest_date:
+        raise HTTPException(status_code=404, detail="No data available yet")
+
     today_rows = _query("""
         SELECT i.slug, i.name_english, i.name_urdu, i.category, i.unit,
                r.avg_price, r.min_price, r.max_price, r.price_change_pct, r.direction,
                CAST(r.date AS DATE) as d
         FROM price_readings r
         JOIN items i ON r.item_id = i.id
-        WHERE CAST(r.date AS DATE) = CURRENT_DATE
-    """)
+        WHERE CAST(r.date AS DATE) = :latest
+    """, {"latest": str(latest_date)})
 
     if not today_rows:
-        raise HTTPException(status_code=404, detail="No data for today yet")
+        raise HTTPException(status_code=404, detail="No data for latest date")
 
-    # Historical prices per item (last N days, excluding today)
+    # Historical prices per item (last N days, excluding latest date)
     history_rows = _query("""
         SELECT i.slug, r.avg_price, CAST(r.date AS DATE) as d
         FROM price_readings r
         JOIN items i ON r.item_id = i.id
-        WHERE CAST(r.date AS DATE) >= CURRENT_DATE - INTERVAL '1 day' * :days
-          AND CAST(r.date AS DATE) < CURRENT_DATE
+        WHERE CAST(r.date AS DATE) >= :latest - INTERVAL '1 day' * :days
+          AND CAST(r.date AS DATE) < :latest
         ORDER BY i.slug, d
-    """, {"days": days})
+    """, {"days": days, "latest": str(latest_date)})
 
     # Build per-item history map
     history_map = defaultdict(list)
@@ -328,27 +334,32 @@ async def get_summary(request: Request):
     _db()
 
     # Today
+    latest_date_row = _query("SELECT MAX(CAST(date AS DATE)) FROM price_readings")
+    latest_date = latest_date_row[0][0] if latest_date_row and latest_date_row[0][0] else None
+    if not latest_date:
+        raise HTTPException(status_code=404, detail="No data available yet")
+
     today_rows = _query("""
         SELECT i.name_english, i.name_urdu, i.category, i.unit,
                r.avg_price, r.price_change_pct, r.direction
         FROM price_readings r
         JOIN items i ON r.item_id = i.id
-        WHERE CAST(r.date AS DATE) = CURRENT_DATE
+        WHERE CAST(r.date AS DATE) = :latest
         ORDER BY r.price_change_pct DESC NULLS LAST
-    """)
+    """, {"latest": str(latest_date)})
 
     if not today_rows:
-        raise HTTPException(status_code=404, detail="No data for today")
+        raise HTTPException(status_code=404, detail="No data for latest date")
 
     # 30-day baseline avg per category
     baseline_rows = _query("""
         SELECT i.category, AVG(r.avg_price) as baseline
         FROM price_readings r
         JOIN items i ON r.item_id = i.id
-        WHERE CAST(r.date AS DATE) BETWEEN CURRENT_DATE - INTERVAL '35 days'
-                                       AND CURRENT_DATE - INTERVAL '5 days'
+        WHERE CAST(r.date AS DATE) BETWEEN :latest - INTERVAL '35 days'
+                                       AND :latest - INTERVAL '5 days'
         GROUP BY i.category
-    """)
+    """, {"latest": str(latest_date)})
     baseline = {row[0]: float(row[1]) for row in baseline_rows}
 
     # Category stats
