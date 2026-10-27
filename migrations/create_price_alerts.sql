@@ -14,3 +14,9 @@ CREATE TABLE IF NOT EXISTS price_alerts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_price_alerts_active ON price_alerts(active, slug);
+
+-- Enable RLS (blocks all anon/authenticated access by default)
+ALTER TABLE price_alerts ENABLE ROW LEVEL SECURITY;
+
+-- Only the service_role key (used by your backend) can read/write
+-- No policy needed for anon/authenticated — they get nothing by default
