@@ -811,7 +811,7 @@ function renderTable() {
     const sign  = pct > 0 ? '+' : '';
     const arrow = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '→';
     const pctTxt = pct != null ? `${sign}${pct.toFixed(1)}%` : '—';
-    return `<tr onclick="openModal('${d.name_english.replace(/'/g,"\\'")}')">
+    return `<tr data-slug="${d.slug}" style="cursor:pointer">
       <td>
         <div class="item-name-en">${d.name_english}</div>
         ${d.name_urdu ? `<span class="item-name-ur">${d.name_urdu}</span>` : ''}
@@ -956,8 +956,8 @@ function clearBasket() {
 }
 
 // ── Item Modal ────────────────────────────────────────────────────────────────
-function openModal(name) {
-  const d = allData.find(i => i.name_english === name);
+function openModal(nameOrSlug) {
+  const d = allData.find(i => i.name_english === nameOrSlug || i.slug === nameOrSlug);
   if (!d) return;
   document.getElementById('modal-title').textContent = d.name_english;
   document.getElementById('modal-subtitle').textContent = d.name_urdu || '';
@@ -1100,6 +1100,10 @@ document.querySelectorAll('.dir-pill').forEach(btn => {
   btn.addEventListener('click', () => filterDir(btn.dataset.dir));
 });
 document.getElementById('sort-select').addEventListener('change', e => { sortKey = e.target.value; renderTable(); });
+document.getElementById('table-container').addEventListener('click', e => {
+  const tr = e.target.closest('tr[data-slug]');
+  if (tr && !e.target.closest('td:last-child')) openModal(tr.dataset.slug);
+});
 initRangeFilter();
 document.getElementById('search').addEventListener('input', e => { searchQ = e.target.value; renderTable(); });
 
