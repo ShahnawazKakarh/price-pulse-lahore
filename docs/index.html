@@ -442,7 +442,7 @@
   <div class="result-count" id="result-count"></div>
 
   <!-- Table -->
-  <div class="table-wrap">
+  <div class="table-wrap" id="price-table-wrap">
     <div id="table-container">
       <div class="state-wrap"><div class="spinner"></div><span>Loading prices...</span></div>
     </div>
@@ -1444,7 +1444,7 @@ function renderCatSignals(cats) {
         </div>
         <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Top movers in this category:</div>
         <div id="cat-movers-${idx}"><div style="font-size:11px;color:var(--text3)">Loading…</div></div>
-        <button onclick="event.stopPropagation();setCat('${c.category}');showPage('prices')" style="margin-top:10px;width:100%;padding:7px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--accent);font-size:12px;cursor:pointer;font-family:var(--font-m)">
+        <button onclick="event.stopPropagation();setCat('${c.category}');document.getElementById('price-table-wrap')?.scrollIntoView({behavior:'smooth',block:'start'})" style="margin-top:10px;width:100%;padding:7px;border-radius:6px;border:1px solid var(--border);background:transparent;color:var(--accent);font-size:12px;cursor:pointer;font-family:var(--font-m)">
           View all ${c.item_count} ${catMeta.label} →
         </button>
       </div>
