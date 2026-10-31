@@ -1148,6 +1148,9 @@ async function fetchInsights() {
       renderCatSignals(data.categories || []);
       renderWeeklyDigest(data);
     initCorrButtons();
+    // Auto-load correlation for first category
+    const firstCat = (data.categories || [])[0];
+    if (firstCat) loadCorrelations(firstCat.category);
     }
     if (dowRes && dowRes.ok) {
       const data = await dowRes.json();
@@ -1599,7 +1602,8 @@ function initCorrButtons() {
   const wrap = document.getElementById('corr-cat-btns');
   if (!wrap || !_summaryData) return;
   wrap.innerHTML = '';
-  (_summaryData.categories || []).forEach(c => {
+  const catList = Array.isArray(_summaryData) ? _summaryData : (_summaryData.categories || []);
+  catList.forEach(c => {
     const btn = document.createElement('button');
     btn.className = 'filter-btn';
     btn.textContent = c.category;
@@ -1656,7 +1660,15 @@ async function loadCorrelations(category) {
   }
 }
 
-fetchData();
+async function fetchDataAndBootstrap() {
+  await fetchData();
+  // Auto-load forecast for first item with enough data
+  if (!_forecastSlug && allData && allData.length > 0) {
+    const first = allData.find(d => d.avg_price > 0);
+    if (first) loadForecast(first.slug, first.name_english || first.slug);
+  }
+}
+fetchDataAndBootstrap();
 setInterval(fetchData, 30 * 60 * 1000);
 fetchInsights();
 setInterval(fetchInsights, 30 * 60 * 1000);
