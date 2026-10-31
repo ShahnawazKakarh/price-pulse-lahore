@@ -321,7 +321,81 @@
       .cat-summary { grid-template-columns: 1fr 1fr; }
       .search-input { width: 130px; }
     }
-  </style>
+  
+/* ── Phase 3 Layout ─────────────────────────────────────────────────────── */
+.p3-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin: 0 0 24px;
+  padding: 0 24px;
+}
+@media (max-width: 860px) { .p3-grid { grid-template-columns: 1fr; } }
+
+.p3-card {
+  background: rgba(15,22,40,0.85);
+  border: 1px solid rgba(59,158,255,0.12);
+  border-radius: 16px;
+  padding: 20px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.p3-card-header { display: flex; align-items: flex-start; gap: 12px; }
+.p3-card-icon { font-size: 22px; line-height:1; margin-top:2px; }
+.p3-card-title { font-size: 14px; font-weight: 700; color: var(--accent); letter-spacing:.02em; }
+.p3-card-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+
+.p3-chart-wrap { position: relative; height: 200px; }
+.p3-chart-wrap canvas { width: 100% !important; height: 100% !important; }
+
+.p3-legend {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 11px; color: var(--text3); flex-wrap: wrap;
+}
+.p3-legend-dot { display:inline-block; width:8px; height:8px; border-radius:50%; }
+.p3-legend-band {
+  display:inline-block; width:14px; height:8px; border-radius:3px;
+  background: rgba(59,158,255,0.22); border:1px solid rgba(59,158,255,0.35);
+}
+
+.p3-meta { font-size: 11px; color: var(--text3); line-height: 1.6; }
+.p3-meta strong { color: var(--text2); }
+
+.p3-cat-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.p3-cat-btn {
+  padding: 5px 12px; border-radius: 20px; font-size: 11px; font-weight: 600;
+  border: 1px solid rgba(59,158,255,0.2); background: rgba(59,158,255,0.06);
+  color: var(--text2); cursor: pointer; transition: all .15s;
+  text-transform: capitalize;
+}
+.p3-cat-btn:hover, .p3-cat-btn.active {
+  background: var(--accent); color: #fff; border-color: var(--accent);
+}
+
+.p3-corr-wrap { overflow-x: auto; flex: 1; }
+.p3-empty { color: var(--text3); font-size: 12px; padding: 20px 0; text-align: center; }
+
+/* Correlation table */
+.corr-tbl { border-collapse: collapse; font-size: 10px; width: 100%; }
+.corr-tbl th {
+  color: var(--text3); font-weight: 600; padding: 4px 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 72px; font-size: 10px;
+}
+.corr-tbl th:first-child { text-align: left; min-width: 90px; }
+.corr-tbl td {
+  padding: 4px 6px; text-align: center; font-size: 10px; font-weight: 600;
+  border: 1px solid rgba(255,255,255,0.04); white-space: nowrap;
+}
+.corr-tbl td:first-child {
+  text-align: left; color: var(--text2); font-weight: 500;
+  max-width: 90px; overflow: hidden; text-overflow: ellipsis;
+}
+
+</style>
 </head>
 <body>
 
@@ -811,7 +885,7 @@ function renderTable() {
     const sign  = pct > 0 ? '+' : '';
     const arrow = dir === 'up' ? '▲' : dir === 'down' ? '▼' : '→';
     const pctTxt = pct != null ? `${sign}${pct.toFixed(1)}%` : '—';
-    return `<tr data-slug="${d.slug}" style="cursor:pointer">
+    return `<tr data-slug="${d.slug||''}" data-name="${(d.name_english||'').replace(/"/g,'&quot;')}" style="cursor:pointer">
       <td>
         <div class="item-name-en">${d.name_english}</div>
         ${d.name_urdu ? `<span class="item-name-ur">${d.name_urdu}</span>` : ''}
@@ -1101,8 +1175,11 @@ document.querySelectorAll('.dir-pill').forEach(btn => {
 });
 document.getElementById('sort-select').addEventListener('change', e => { sortKey = e.target.value; renderTable(); });
 document.getElementById('table-container').addEventListener('click', e => {
-  const tr = e.target.closest('tr[data-slug]');
-  if (tr && !e.target.closest('td:last-child')) openModal(tr.dataset.slug);
+  const tr = e.target.closest('tr[data-slug], tr[data-name]');
+  if (tr && !e.target.closest('.fav-star') && !e.target.closest('.cmp-btn')) {
+    const key = tr.dataset.slug || tr.dataset.name;
+    if (key) openModal(key);
+  }
 });
 initRangeFilter();
 document.getElementById('search').addEventListener('input', e => { searchQ = e.target.value; renderTable(); });
@@ -1593,7 +1670,9 @@ async function loadForecast(slug, nameEn) {
 
     const arrow = data.trend === 'rising' ? '↑' : data.trend === 'falling' ? '↓' : '→';
     const slope = Math.abs(data.slope_per_day).toFixed(2);
-    if (meta) meta.innerHTML = `<b>${nameEn}</b> · Trend: <b>${arrow} ${data.trend}</b> (${slope} Rs/day) · Residual σ: ${data.residual_std} Rs · ${data.data_points} data points`;
+    const lbl = document.getElementById('forecast-item-label');
+    if (lbl) lbl.textContent = nameEn;
+    if (meta) meta.innerHTML = `Trend: <strong>${arrow} ${data.trend}</strong> &nbsp;·&nbsp; ${slope} Rs/day &nbsp;·&nbsp; σ ${data.residual_std} Rs &nbsp;·&nbsp; ${data.data_points} data points`;
   } catch(e) {
     if (meta) meta.textContent = 'Forecast unavailable (need 90+ days of data for this item)';
   }
@@ -1607,11 +1686,17 @@ function initCorrButtons() {
   if (!wrap || !_summaryData) return;
   wrap.innerHTML = '';
   const catList = Array.isArray(_summaryData) ? _summaryData : (_summaryData.categories || []);
-  catList.forEach(c => {
+  catList.forEach((c, i) => {
     const btn = document.createElement('button');
-    btn.className = 'filter-btn';
-    btn.textContent = c.category;
-    btn.onclick = () => loadCorrelations(c.category);
+    btn.className = 'p3-cat-btn' + (i === 0 ? ' active' : '');
+    const meta = (typeof CAT_META !== 'undefined' && CAT_META[c.category]) || {};
+    btn.textContent = (meta.emoji ? meta.emoji + ' ' : '') + (c.category||'').replace(/-/g,' ');
+    btn.dataset.cat = c.category;
+    btn.onclick = () => {
+      wrap.querySelectorAll('.p3-cat-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      loadCorrelations(c.category);
+    };
     wrap.appendChild(btn);
   });
 }
@@ -1631,31 +1716,32 @@ async function loadCorrelations(category) {
     }
 
     // Build heatmap table
-    let tbl = '<div style="overflow-x:auto"><table id="corr-table"><thead><tr><th></th>';
+    let tbl = '<div style="overflow-x:auto"><table class="corr-tbl"><thead><tr><th></th>';
     items.forEach(it => {
-      tbl += `<th title="${it.name}">${it.name.length > 8 ? it.name.slice(0,8)+'…' : it.name}</th>`;
+      const short = it.name.length > 9 ? it.name.slice(0,9)+'…' : it.name;
+      tbl += `<th title="${it.name}">${short}</th>`;
     });
     tbl += '</tr></thead><tbody>';
 
     data.matrix.forEach((row, ri) => {
-      tbl += `<tr><th style="text-align:left;white-space:nowrap">${items[ri].name.length > 10 ? items[ri].name.slice(0,10)+'…' : items[ri].name}</th>`;
-      items.forEach(it => {
+      const rowName = items[ri].name.length > 12 ? items[ri].name.slice(0,12)+'…' : items[ri].name;
+      tbl += `<tr><td style="color:var(--text2);font-weight:500">${rowName}</td>`;
+      items.forEach((it, ci) => {
         const r = row.correlations[it.slug];
         const val = r != null ? r : 0;
         const abs = Math.abs(val);
-        // Color: positive → blue, negative → red, diagonal → grey
         let bg;
-        if (ri === items.indexOf(it)) bg = 'rgba(100,100,100,0.3)';
-        else if (val > 0) bg = `rgba(59,158,255,${(abs * 0.8).toFixed(2)})`;
-        else               bg = `rgba(255,80,80,${(abs * 0.8).toFixed(2)})`;
+        if (ri === ci) bg = 'rgba(255,255,255,0.07)';
+        else if (val > 0) bg = `rgba(59,158,255,${Math.min(abs * 0.85, 0.85).toFixed(2)})`;
+        else               bg = `rgba(255,70,70,${Math.min(abs * 0.85, 0.85).toFixed(2)})`;
         const txt = r != null ? val.toFixed(2) : '—';
-        const textCol = abs > 0.4 ? '#fff' : 'var(--text-muted)';
-        tbl += `<td style="background:${bg};color:${textCol};font-weight:${abs>0.6?700:400}" title="${items[ri].name} vs ${it.name}: ${txt}">${txt}</td>`;
+        const textCol = abs > 0.35 ? '#fff' : '#667788';
+        tbl += `<td style="background:${bg};color:${textCol};font-weight:${abs>0.6?700:400}" title="${items[ri].name} ↔ ${it.name}: ${txt}">${txt}</td>`;
       });
       tbl += '</tr>';
     });
     tbl += '</tbody></table></div>';
-    tbl += '<div style="margin-top:8px;font-size:11px;color:var(--text-muted)">🔵 positive correlation · 🔴 negative · values closer to ±1 = stronger link</div>';
+    tbl += '<div style="margin-top:10px;font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:10px;height:10px;background:rgba(59,158,255,0.7);border-radius:2px"></span>positive <span style="display:inline-block;width:10px;height:10px;background:rgba(255,70,70,0.7);border-radius:2px;margin-left:6px"></span>negative · closer to ±1 = stronger link</div>';
 
     _corrLoaded[category] = tbl;
     container.innerHTML = tbl;
@@ -1723,23 +1809,43 @@ setInterval(fetchInsights, 30 * 60 * 1000);
 
 
 <!-- ── Phase 3: Forecast & Correlation ───────────────────────── -->
-<div class="insights-section" style="margin-top:0" id="p3-forecast-section">
-  <div class="p3-section">
-    <div class="p3-section-title">📈 Extended Forecast <span style="font-size:11px;font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0;margin-left:4px">14-day with confidence bands — select an item above to load</span></div>
-    <div id="forecast-canvas-wrap" style="position:relative"><canvas id="forecast-canvas" height="160"></canvas></div>
-    <div class="conf-band-legend">
-      <span><span class="conf-dot" style="background:#3b9eff"></span>Predicted</span>
-      <span><span class="conf-dot" style="background:rgba(59,158,255,0.3);width:16px"></span>95% band</span>
-      <span><span class="conf-dot" style="background:rgba(255,180,0,0.8)"></span>Actual history</span>
+<div id="p3-forecast-section" class="p3-grid">
+
+  <!-- Forecast card -->
+  <div class="p3-card">
+    <div class="p3-card-header">
+      <div class="p3-card-icon">📈</div>
+      <div>
+        <div class="p3-card-title">Extended Forecast</div>
+        <div class="p3-card-sub" id="forecast-item-label">Select an item in the table above</div>
+      </div>
     </div>
-    <div id="forecast-meta" style="margin-top:10px;font-size:12px;color:var(--text-muted)"></div>
+    <div id="forecast-canvas-wrap" class="p3-chart-wrap">
+      <canvas id="forecast-canvas"></canvas>
+    </div>
+    <div class="p3-legend">
+      <span class="p3-legend-dot" style="background:#ffb400"></span><span>Actual</span>
+      <span class="p3-legend-dot" style="background:#3b9eff"></span><span>Predicted</span>
+      <span class="p3-legend-band"></span><span>95% band</span>
+    </div>
+    <div id="forecast-meta" class="p3-meta"></div>
   </div>
 
-  <div class="p3-section">
-    <div class="p3-section-title">🔗 Price Correlations <span style="font-size:11px;font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0;margin-left:4px">items that move together in same category</span></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px" id="corr-cat-btns"></div>
-    <div id="corr-container"><div style="color:var(--text-muted);font-size:12px">Click a category above to load correlation matrix.</div></div>
+  <!-- Correlation card -->
+  <div class="p3-card">
+    <div class="p3-card-header">
+      <div class="p3-card-icon">🔗</div>
+      <div>
+        <div class="p3-card-title">Price Correlations</div>
+        <div class="p3-card-sub">Items that move together in the same category</div>
+      </div>
+    </div>
+    <div id="corr-cat-btns" class="p3-cat-btns"></div>
+    <div id="corr-container" class="p3-corr-wrap">
+      <div class="p3-empty">Choose a category above to load the correlation matrix</div>
+    </div>
   </div>
+
 </div>
 
 </body>
