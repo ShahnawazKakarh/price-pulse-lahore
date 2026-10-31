@@ -395,6 +395,34 @@
   max-width: 90px; overflow: hidden; text-overflow: ellipsis;
 }
 
+
+/* ── Correlation Pairs List ─────────────────────────────────────────────── */
+.corr-pairs { display: flex; flex-direction: column; gap: 8px; }
+.corr-pair-row { display: flex; flex-direction: column; gap: 4px; }
+.corr-pair-names {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text);
+}
+.corr-name-a { font-weight: 600; }
+.corr-name-b { color: var(--text2); }
+.corr-arrow { color: var(--text3); font-size: 11px; }
+.corr-bar-wrap { width: 100%; }
+.corr-bar {
+  min-width: 40px; padding: 3px 8px;
+  border-radius: 0 4px 4px 0;
+  display: flex; align-items: center; gap: 8px;
+}
+.corr-bar-label { font-size: 11px; font-weight: 700; font-family: var(--font-m); }
+.corr-strength { font-size: 10px; opacity: 0.7; margin-left: auto; }
+.p3-loading { color: var(--text3); font-size: 12px; padding: 12px 0; }
+
+
+.p3-forecast-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 180px; color: var(--text3); font-size: 13px; text-align: center; gap: 6px;
+}
+.p3-forecast-empty-icon { font-size: 32px; opacity: 0.4; }
+
 </style>
 </head>
 <body>
@@ -1674,7 +1702,11 @@ async function loadForecast(slug, nameEn) {
     if (lbl) lbl.textContent = nameEn;
     if (meta) meta.innerHTML = `Trend: <strong>${arrow} ${data.trend}</strong> &nbsp;·&nbsp; ${slope} Rs/day &nbsp;·&nbsp; σ ${data.residual_std} Rs &nbsp;·&nbsp; ${data.data_points} data points`;
   } catch(e) {
-    if (meta) meta.textContent = 'Forecast unavailable (need 90+ days of data for this item)';
+    const wrap = document.getElementById('forecast-canvas-wrap');
+    if (wrap) wrap.innerHTML = '<div class="p3-forecast-empty"><div class="p3-forecast-empty-icon">📊</div><div>Forecast needs 90+ days of price data</div><div style="font-size:11px;margin-top:4px;color:var(--text3)">This item has been tracked for less than 3 months</div></div>';
+    if (meta) meta.innerHTML = '';
+    const lbl = document.getElementById('forecast-item-label');
+    if (lbl) lbl.textContent = nameEn + ' — insufficient data';
   }
 }
 
@@ -1705,48 +1737,57 @@ async function loadCorrelations(category) {
   const container = document.getElementById('corr-container');
   if (!container) return;
   if (_corrLoaded[category]) { container.innerHTML = _corrLoaded[category]; return; }
-  container.innerHTML = '<div style="color:var(--text-muted);font-size:12px">Loading…</div>';
+  container.innerHTML = '<div class="p3-loading">Loading correlations…</div>';
 
   try {
     const data = await fetch(`${BASE}/analytics/correlations?category=${encodeURIComponent(category)}&days=90`).then(r => r.json());
     const items = data.items;
     if (!items || items.length === 0) {
-      container.innerHTML = '<div style="color:var(--text-muted);font-size:12px">Not enough data for this category yet.</div>';
+      container.innerHTML = '<div class="p3-empty">Not enough data for this category yet (need 90+ days).</div>';
       return;
     }
 
-    // Build heatmap table
-    let tbl = '<div style="overflow-x:auto"><table class="corr-tbl"><thead><tr><th></th>';
-    items.forEach(it => {
-      const short = it.name.length > 9 ? it.name.slice(0,9)+'…' : it.name;
-      tbl += `<th title="${it.name}">${short}</th>`;
-    });
-    tbl += '</tr></thead><tbody>';
-
+    // Build ranked pairs list — far more readable than a matrix
+    const pairs = [];
     data.matrix.forEach((row, ri) => {
-      const rowName = items[ri].name.length > 12 ? items[ri].name.slice(0,12)+'…' : items[ri].name;
-      tbl += `<tr><td style="color:var(--text2);font-weight:500">${rowName}</td>`;
       items.forEach((it, ci) => {
+        if (ci <= ri) return; // upper triangle only, skip diagonal
         const r = row.correlations[it.slug];
-        const val = r != null ? r : 0;
-        const abs = Math.abs(val);
-        let bg;
-        if (ri === ci) bg = 'rgba(255,255,255,0.07)';
-        else if (val > 0) bg = `rgba(59,158,255,${Math.min(abs * 0.85, 0.85).toFixed(2)})`;
-        else               bg = `rgba(255,70,70,${Math.min(abs * 0.85, 0.85).toFixed(2)})`;
-        const txt = r != null ? val.toFixed(2) : '—';
-        const textCol = abs > 0.35 ? '#fff' : '#667788';
-        tbl += `<td style="background:${bg};color:${textCol};font-weight:${abs>0.6?700:400}" title="${items[ri].name} ↔ ${it.name}: ${txt}">${txt}</td>`;
+        if (r == null) return;
+        pairs.push({ a: items[ri].name, b: it.name, r });
       });
-      tbl += '</tr>';
     });
-    tbl += '</tbody></table></div>';
-    tbl += '<div style="margin-top:10px;font-size:11px;color:var(--text3);display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:10px;height:10px;background:rgba(59,158,255,0.7);border-radius:2px"></span>positive <span style="display:inline-block;width:10px;height:10px;background:rgba(255,70,70,0.7);border-radius:2px;margin-left:6px"></span>negative · closer to ±1 = stronger link</div>';
+    pairs.sort((a, b) => Math.abs(b.r) - Math.abs(a.r));
+    const top = pairs.slice(0, 12);
 
-    _corrLoaded[category] = tbl;
-    container.innerHTML = tbl;
+    let html = '<div class="corr-pairs">';
+    top.forEach(p => {
+      const pct = Math.abs(p.r) * 100;
+      const isPos = p.r >= 0;
+      const label = Math.abs(p.r) >= 0.8 ? 'Strong' : Math.abs(p.r) >= 0.5 ? 'Moderate' : 'Weak';
+      const color = isPos ? '#3b9eff' : '#ff4d6a';
+      const sign  = isPos ? '+' : '';
+      html += `<div class="corr-pair-row">
+        <div class="corr-pair-names">
+          <span class="corr-name-a">${p.a}</span>
+          <span class="corr-arrow">${isPos ? '↔' : '⊘'}</span>
+          <span class="corr-name-b">${p.b}</span>
+        </div>
+        <div class="corr-bar-wrap">
+          <div class="corr-bar" style="width:${pct.toFixed(0)}%;background:${color}20;border-left:3px solid ${color}">
+            <span class="corr-bar-label" style="color:${color}">${sign}${p.r.toFixed(2)}</span>
+            <span class="corr-strength" style="color:${color}">${label}</span>
+          </div>
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+    if (pairs.length === 0) html = '<div class="p3-empty">No significant correlations found.</div>';
+
+    _corrLoaded[category] = html;
+    container.innerHTML = html;
   } catch(e) {
-    container.innerHTML = '<div style="color:var(--text-muted);font-size:12px">Correlations unavailable (need 90+ days).</div>';
+    container.innerHTML = '<div class="p3-empty">Correlations unavailable (need 90+ days of data).</div>';
   }
 }
 
